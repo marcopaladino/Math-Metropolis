@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <style>
+    body { 
+      margin: 0; overflow: hidden; 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+      background: #7ec0ee; touch-action: none; 
+      -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+    }
+    #gameCanvas { display: block; width: 100vw; height: 100vh; }
+    
+    /* --- HUD OVERLAYS --- */
+    #ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; }
+
+    /* Compass */
+    #compass-container {
+      position: absolute; top: 0; left: 0; width: 100vw; height: 46px; 
+      background: linear-gradient(180deg, rgba(15, 23, 42, 0.9) 0%, rgba(15, 23, 42, 0.55) 75%, transparent 100%);
+      border-bottom: 1.5px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 4px 18px rgba(0,0,0,0.35); overflow: hidden; pointer-events: none;
+    }
+    #compassCanvas { width: 100vw; height: 46px; display: block; }
+    #compass-pointer {
+      position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+      width: 0; height: 0; border-left: 7px solid transparent;
+      border-right: 7px solid transparent; border-top: 8px solid #ff3d00;
+    }
+
+    /* Seasonal & Time HUD */
+    #season-hud {
+      position: absolute; top: 56px; left: 16px; background: rgba(15, 23, 42, 0.78);
+      backdrop-filter: blur(6px); border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 12px; padding: 8px 16px; display: flex; align-items: center; gap: 10px;
+      color: #fff; box-shadow: 0 4px 14px rgba(0,0,0,0.3); pointer-events: none;
+    }
+    #season-icon { font-size: 20px; }
+    #season-info { display: flex; flex-direction: column; }
+    #season-name { font-size: 13px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: #ffea00; }
+    #time-clock { font-size: 11px; font-weight: 600; color: rgba(255, 255, 255, 0.85); letter-spacing: 0.5px; }
+
+    /* Multiplayer & Score HUD */
+    #multiplayer-hud {
+      position: absolute; top: 56px; right: 16px; background: rgba(15, 23, 42, 0.78);
+      backdrop-filter: blur(6px); border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 12px; padding: 8px 16px; display: flex; align-items: center; gap: 14px;
+      color: #fff; box-shadow: 0 4px 14px rgba(0,0,0,0.3); pointer-events: none;
+    }
+    .hud-stat { display: flex; flex-direction: column; align-items: center; }
+    .hud-val { font-size: 18px; font-weight: 800; color: #00e676; }
+    .hud-lbl { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; opacity: 0.8; }
+
+    #instructions-box {
+      position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.72); padding: 8px 24px; border-radius: 20px;
+      color: #fff; font-size: 14px; font-weight: 600; letter-spacing: 0.5px;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.5); text-align: center; white-space: nowrap;
+    }
+
+    /* Mobile Controls */
+    #joystick-zone {
+      position: absolute; bottom: 85px; left: 30px; width: 110px; height: 110px;
+      background: rgba(255, 255, 255, 0.2); border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.45);
+      pointer-events: auto; display: none; z-index: 5;
+    }
+    #joystick-knob {
+      position: absolute; top: 27px; left: 27px; width: 56px; height: 56px;
+      background: rgba(255, 255, 255, 0.95); border-radius: 50%;
+      box-shadow: 0px 4px 0px rgba(0,0,0,0.2); pointer-events: none; transition: transform 0.05s ease-out;
+    }
+    .action-btn {
+      position: absolute; right: 30px; width: 74px; height: 74px; color: #fff; font-size: 14px; font-weight: 800; letter-spacing: 1px;
+      border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.6); display: none; align-items: center; justify-content: center;
+      pointer-events: auto; z-index: 5; cursor: pointer;
+    }
+    #jump-btn { bottom: 85px; background: #1976d2; box-shadow: 0px 5px 0px #0d47a1; }
+    #jump-btn:active { transform: translateY(4px); box-shadow: 0px 1px 0px #0d47a1; }
+    #interact-btn { bottom: 175px; background: #fbc02d; box-shadow: 0px 5px 0px #f57f17; color: #212121; }
+    #interact-btn:active { transform: translateY(4px); box-shadow: 0px 1px 0px #f57f17; }
+
+    /* Modals */
+    .modal-overlay {
+      position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(0,0,0,0.8); display: flex; flex-direction: column; 
+      align-items: center; justify-content: center; z-index: 50; pointer-events: auto;
+    }
+    .modal-box {
+      background: rgba(15, 23, 42, 0.96); border: 3px solid #ffea00; padding: 28px; border-radius: 16px; text-align: center;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.6); width: 88%; max-width: 440px;
+    }
+    .modal-box h2 { margin-top: 0; color: #ffea00; font-size: 26px; text-transform: uppercase; letter-spacing: 1.5px; }
+    .modal-box p { color: #fff; font-size: 15px; margin-bottom: 20px; font-weight: 500; }
+    
+    .ans-btn, .grade-btn, .menu-btn {
+      display: block; width: 100%; background: #1976d2; color: #fff; border: 2px solid #64b5f6; padding: 12px; margin-bottom: 10px; border-radius: 8px;
+      font-size: 15px; font-weight: bold; cursor: pointer; transition: background 0.2s; box-sizing: border-box;
+    }
+    .ans-btn:hover, .grade-btn:hover, .menu-btn:hover { background: #1565c0; }
+    .grade-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+    .room-input {
+      width: 100%; padding: 12px; margin-bottom: 12px; border-radius: 8px; border: 2px solid #64b5f6;
+      background: #0f172a; color: #ffea00; font-size: 18px; font-weight: bold; text-align: center;
+      letter-spacing: 2px; text-transform: uppercase; box-sizing: border-box;
+    }
+    .btn-row { display: flex; gap: 10px; }
+    #quest-modal, #milestone-modal { display: none; }
+  </style>
+</head>
+<body>
+
+  <div id="ui-layer">
+    <div id="compass-container"><canvas id="compassCanvas"></canvas><div id="compass-pointer"></div></div>
+    
+    <div id="season-hud">
+      <div id="season-icon">🌸</div>
+      <div id="season-info"><span id="season-name">SPRING</span><span id="time-clock">YEAR 1 • DAY 1 • 12:00</span></div>
+    </div>
+
+    <div id="multiplayer-hud">
+      <div class="hud-stat">
+        <span class="hud-val" id="hud-room">SOLO</span>
+        <span class="hud-lbl">Room</span>
+      </div>
+      <div class="hud-stat">
+        <span class="hud-val" id="hud-players">1</span>
+        <span class="hud-lbl">Players</span>
+      </div>
+      <div class="hud-stat">
+        <span class="hud-val" id="hud-score">0</span>
+        <span class="hud-lbl">Stars</span>
+      </div>
+    </div>
+    
+    <div id="instructions-box"><span id="inst-text">Welcome to Math Metropolis!</span></div>
+  </div>
+
+  <div id="joystick-zone"><div id="joystick-knob"></div></div>
+  <div id="jump-btn" class="action-btn">JUMP</div>
+  <div id="interact-btn" class="action-btn">QUEST</div>
+
+  <!-- Setup & Multiplayer Lobby Modal -->
+  <div id="start-modal" class="modal-overlay">
+    <div class="modal-box" id="step-grade">
+      <h2>Math Metropolis</h2>
+      <p>Select your Grade Level (Ontario Curriculum):</p>
+      <div class="grade-grid">
+        <button class="grade-btn" onclick="selectGrade(1)">Grade 1</button>
+        <button class="grade-btn" onclick="selectGrade(2)">Grade 2</button>
+        <button class="grade-btn" onclick="selectGrade(3)">Grade 3</button>
+        <button class="grade-btn" onclick="selectGrade(4)">Grade 4</button>
+        <button class="grade-btn" onclick="selectGrade(5)">Grade 5</button>
+        <button class="grade-btn" onclick="selectGrade(6)">Grade 6</button>
+        <button class="grade-btn" onclick="selectGrade(7)">Grade 7</button>
+        <button class="grade-btn" onclick="selectGrade(8)">Grade 8</button>
+      </div>
+    </div>
+
+    <div class="modal-box" id="step-mode" style="display:none;">
+      <h2>Session Mode</h2>
+      <p>Play alone or start a multiplayer classroom session:</p>
+      <button class="menu-btn" style="background:#2e7d32; border-color:#81c784;" onclick="startSolo()">Play Solo</button>
+      <button class="menu-btn" style="background:#f57c00; border-color:#ffb74d;" onclick="showHostUI()">Host Multiplayer Session</button>
+      <button class="menu-btn" style="background:#0288d1; border-color:#4fc3f7;" onclick="showJoinUI()">Join with Room Code</button>
+    </div>
+
+    <div class="modal-box" id="step-host" style="display:none;">
+      <h2>Host Classroom</h2>
+      <p>Share this 4-letter Room Code with other students:</p>
+      <div id="host-code-display" style="font-size:32px; font-weight:800; letter-spacing:4px; color:#ffea00; margin:16px 0;">GENERATING...</div>
+      <p id="host-status" style="font-size:13px; opacity:0.8;">Waiting for connections...</p>
+      <button class="menu-btn" style="background:#2e7d32; border-color:#81c784;" onclick="launchMultiplayerGame()">Enter World</button>
+    </div>
+
+    <div class="modal-box" id="step-join" style="display:none;">
+      <h2>Join Session</h2>
+      <p>Enter the Room Code given by your teacher or friend:</p>
+      <input type="text" id="join-code-input" class="room-input" placeholder="CODE" maxlength="5">
+      <div class="btn-row">
+        <button class="menu-btn" style="background:#455a64; border-color:#90a4ae;" onclick="backToMode()">Back</button>
+        <button class="menu-btn" style="background:#0288d1; border-color:#4fc3f7;" onclick="joinRoom()">Join Game</button>
+      </div>
+      <p id="join-status" style="font-size:13px; color:#ff8a80; margin-top:8px;"></p>
+    </div>
+  </div>
+
+  <!-- Quest Question Modal -->
+  <div id="quest-modal" class="modal-overlay">
+    <div class="modal-box">
+      <h2>Quest Master</h2>
+      <p id="quest-question">Question text?</p>
+      <button class="ans-btn" id="ans-0">Ans 1</button>
+      <button class="ans-btn" id="ans-1">Ans 2</button>
+      <button class="ans-btn" id="ans-2">Ans 3</button>
+    </div>
+  </div>
+
+  <!-- 10 Quests Milestone Modal -->
+  <div id="milestone-modal" class="modal-overlay">
+    <div class="modal-box">
+      <h2>Fantastic Job!</h2>
+      <p>10 Quests completed! The city celebrates your mathematical mastery with fireworks.</p>
+      <div class="btn-row">
+        <button class="ans-btn" style="background:#00e676; border-color:#b9f6ca;" onclick="continueGame()">Keep Playing</button>
+        <button class="ans-btn" style="background:#d32f2f; border-color:#ff8a80;" onclick="stopGame()">Explore Only</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- GAME CONSTANTS & STATE ---
+    const planetRadius = 120;
+    const moveSpeed = 0.44;
+    const keys = { w: false, a: false, s: false, d: false, ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, ' ': false };
+    let joyX = 0; let joyY = 0; let isDragging = false;
+    
+    let isGrounded = true; let altitude = 0; let radialVelocity = 0;
+    const gravity = 0.032; const jumpStrength = 0.38;
+    
+    let gameState = 'start'; 
+    let playerGrade = 1;
+    let correctAnswersCount = 0;
+    const clock = new THREE.Clock();
+    const YEAR_DURATION = 3600; 
+    const DAY_DURATION = 60;    
+
+    let questTargetIndex = -1;
+    let beaconGroup = null; let beaconAura = null; let beaconLight = null;
+    let questHighlightGroup = null; let questHighlightMaterial = null;
+    let interactInRange = false; let availableQuests = []; 
+
+    // --- PEERJS MULTIPLAYER ARCHITECTURE ---
+    let isMultiplayer = false;
+    let isHost = false;
+    let myPeer = null;
+    let hostConnection = null;
+    const clientConnections = {}; // For host: peerId -> DataConnection
+    const remotePlayers = {};     // peerId -> { group, targetPos, targetQuat, walkCycle, ... }
+    let currentRoomCode = "SOLO";
+
+    const suitColorPalette = [0xd32f2f, 0x388e3c, 0x7b1fa2, 0xf57c00, 0x0097a7, 0x5d4037, 0x455a64, 0xc2185b];
+
+    // --- PROCEDURAL CURRICULUM GENERATOR ---
+    function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+    
+    function generateMathQuestion(grade) {
+      let q = "", ans = 0, w1 = 0, w2 = 0;
+      switch(grade) {
+        case 1:
+          let a1 = rand(1, 12); let b1 = rand(1, 18 - a1);
+          if (Math.random() > 0.5) { q = `What is ${a1} + ${b1}?`; ans = a1 + b1; }
+          else { let m = a1 + b1; q = `What is ${m} - ${a1}?`; ans = b1; }
+          w1 = ans + rand(1, 3); w2 = Math.max(0, ans - rand(1, 3));
+          break;
+        case 2:
+          if (Math.random() > 0.35) {
+            let a2 = rand(10, 45); let b2 = rand(10, 45);
+            q = `What is ${a2} + ${b2}?`; ans = a2 + b2; w1 = ans + 10; w2 = ans - 5;
+          } else { q = "How many sides does a pentagon have?"; ans = 5; w1 = 6; w2 = 8; }
+          break;
+        case 3:
+          if (Math.random() > 0.5) {
+            let a3 = rand(2, 9); let b3 = rand(2, 9);
+            q = `What is ${a3} × ${b3}?`; ans = a3 * b3; w1 = ans + a3; w2 = ans - b3;
+          } else {
+            let num = rand(10, 40); q = `What is half of ${num * 2}?`; ans = num; w1 = num + 4; w2 = num - 2;
+          }
+          break;
+        case 4:
+          if (Math.random() > 0.35) {
+            let a4 = rand(10, 20); let b4 = rand(3, 8);
+            q = `What is ${a4} × ${b4}?`; ans = a4 * b4; w1 = ans + 10; w2 = ans - b4;
+          } else {
+            let l = rand(4, 9); let w = rand(3, 7);
+            q = `Area of a ${l}m by ${w}m rectangle?`; ans = l * w; w1 = (l + w) * 2; w2 = l * w + 6;
+          }
+          break;
+        case 5:
+          if (Math.random() > 0.5) {
+            let a5 = (rand(1, 80) / 10).toFixed(1); let b5 = (rand(1, 40) / 10).toFixed(1);
+            q = `What is ${a5} + ${b5}?`; ans = (parseFloat(a5) + parseFloat(b5)).toFixed(1);
+            w1 = (parseFloat(ans) + 1.0).toFixed(1); w2 = (parseFloat(ans) - 0.5).toFixed(1);
+          } else {
+            let c5 = rand(3, 11); q = `What is ${c5 * 12} ÷ 12?`; ans = c5; w1 = c5 + 2; w2 = c5 - 1;
+          }
+          break;
+        case 6:
+          if (Math.random() > 0.5) {
+            let val = rand(2, 8) * 10; q = `What is 25% of ${val}?`; ans = val * 0.25; w1 = ans + 5; w2 = ans - 2;
+          } else {
+            let a6 = rand(2, 6); let b6 = rand(2, 6);
+            q = `Solve: (${a6} + ${b6}) × 2`; ans = (a6 + b6) * 2; w1 = a6 + b6 * 2; w2 = ans + 4;
+          }
+          break;
+        case 7:
+          if (Math.random() > 0.5) {
+            let a7 = rand(1, 12); let b7 = rand(10, 22);
+            q = `Solve: ${a7} - ${b7}`; ans = a7 - b7; w1 = b7 - a7; w2 = ans - 3;
+          } else {
+            let x = rand(2, 8); let ansX = rand(2, 7);
+            q = `If ${x}y = ${x * ansX}, what is y?`; ans = ansX; w1 = ansX + 2; w2 = ansX * 2;
+          }
+          break;
+        case 8:
+          if (Math.random() > 0.5) {
+            let a8 = rand(3, 9); q = `What is ${a8} squared (${a8}²)?`; ans = a8 * a8; w1 = a8 * 2; w2 = (a8 + 1) * (a8 + 1);
+          } else {
+            let x = rand(2, 5); let b = rand(2, 8); let res = x * 4 + b;
+            q = `Solve for x: 4x + ${b} = ${res}`; ans = x; w1 = x + 2; w2 = x - 1;
+          }
+          break;
+      }
+      
+      let arr = [String(ans), String(w1), String(w2)];
+      if (arr[1] === arr[0]) arr[1] = String(Number(arr[1]) + 1);
+      if (arr[2] === arr[0] || arr[2] === arr[1]) arr[2] = String(Number(arr[2]) + 2);
+      arr.sort(() => Math.random() - 0.5);
+      return { q: q, a: arr, correct: arr.indexOf(String(ans)) };
+    }
+
+    // --- THREE.JS INITIALIZATION ---
+    const scene = new THREE.Scene();
+    const skyColor = new THREE.Color(0x7ec0ee);
+    scene.background = skyColor; 
+    scene.fog = new THREE.FogExp2(skyColor, 0.0065);
+
+    const aspect = window.innerWidth / window.innerHeight;
+    const camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 800);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true; 
+    renderer.shadowMap.type = THREE.PCFShadowMap; 
+    document.body.appendChild(renderer.domElement);
+
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x37474f, 0.55);
+    scene.add(hemiLight);
+
+    const dirLight = new THREE.DirectionalLight(0xfff8e7, 1.4);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 2048; dirLight.shadow.mapSize.height = 2048;
+    dirLight.shadow.camera.near = 50; dirLight.shadow.camera.far = 600;
+    dirLight.shadow.camera.left = -140; dirLight.shadow.camera.right = 140;
+    dirLight.shadow.camera.top = 140; dirLight.shadow.camera.bottom = -140;
+    scene.add(dirLight);
+
+    const moonLight = new THREE.DirectionalLight(0x90caf9, 0.3); 
+    scene.add(moonLight);
+
+    const planetMat = new THREE.MeshStandardMaterial({ color: 0x4a7c2b, roughness: 0.9, flatShading: true });
+    const planet = new THREE.Mesh(new THREE.SphereGeometry(planetRadius, 96, 96), planetMat);
+    planet.receiveShadow = true; 
+    scene.add(planet);
+
+    function anchorToPlanetSurface(group, surfacePos, randomRotY = true) {
+      group.position.copy(surfacePos);
+      const normal = surfacePos.clone().normalize();
+      group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+      if (randomRotY) group.rotateY(Math.random() * Math.PI * 2);
+    }
+
+    // --- SOLID ENVIRONMENT GENERATION ---
+    const colliders = []; 
+    const buildings = []; 
+    const seasonFoliageMaterials = []; 
+    const streetLampBulbs = [];
+
+    function getMat(hex) { return new THREE.MeshStandardMaterial({ color: hex, roughness: 0.8, flatShading: true }); }
+    const wallColors = [0x546e7a, 0x78909c, 0x8d6e63, 0xa1887f, 0x6d4c41, 0xc2185b, 0xd32f2f, 0x1976d2, 0x0288d1, 0x00796b, 0x388e3c, 0xf57c00, 0x455a64, 0xb0bec5];
+
+    function createUniqueBuilding(surfacePos) {
+      const bGroup = new THREE.Group();
+      const hexColor = wallColors[Math.floor(Math.random() * wallColors.length)];
+      const wallMat = getMat(hexColor); const windowMat = getMat(0x80deea);
+      const w = 5 + Math.random() * 5; const d = 5 + Math.random() * 5;
+      const totalH = 14 + Math.random() * 34; const tiers = Math.random() < 0.4 ? 1 : (Math.random() < 0.7 ? 2 : 3);
+      const isCyl = Math.random() < 0.2; const segs = Math.random() < 0.5 ? 6 : 8;
+      let currY = 0; let currW = w; let currD = d; let tH = totalH / tiers;
+
+      const skirt = new THREE.Mesh(new THREE.BoxGeometry(w + 0.6, 3.0, d + 0.6), getMat(0x263238)); 
+      skirt.position.y = -1.2; bGroup.add(skirt);
+
+      for (let t = 0; t < tiers; t++) {
+        let block = isCyl 
+          ? new THREE.Mesh(new THREE.CylinderGeometry(currW / 2 * 0.95, currW / 2, tH, segs), wallMat)
+          : new THREE.Mesh(new THREE.BoxGeometry(currW, tH, currD), wallMat);
+        block.position.y = currY + tH / 2; block.castShadow = true; block.receiveShadow = true; bGroup.add(block);
+        
+        let band = isCyl 
+          ? new THREE.Mesh(new THREE.CylinderGeometry(currW / 2 * 1.02, currW / 2 * 1.02, tH * 0.35, segs), windowMat)
+          : new THREE.Mesh(new THREE.BoxGeometry(currW * 1.02, tH * 0.35, currD * 1.02), windowMat);
+        band.position.y = block.position.y; bGroup.add(band);
+        currY += tH; currW *= 0.8; currD *= 0.8;
+      }
+      anchorToPlanetSurface(bGroup, surfacePos, true); scene.add(bGroup);
+
+      const bRadius = Math.hypot(w, d) / 2 + 0.2;
+      buildings.push({ group: bGroup, type: 'building', pos: surfacePos.clone(), radius: bRadius, topY: currY, completed: false });
+      colliders.push({ pos: surfacePos.clone(), radius: bRadius });
+    }
+
+    const plazaCenter = new THREE.Vector3(0, 0, planetRadius);
+    for (let i = 0; i < 160; i++) {
+      const phi = Math.acos(-1 + (2 * i) / 160); const theta = Math.sqrt(160 * Math.PI) * phi;
+      const bPos = new THREE.Vector3().setFromSphericalCoords(planetRadius, phi, theta);
+      if (bPos.distanceTo(plazaCenter) > 28) createUniqueBuilding(bPos);
+    }
+    for (let i = 0; i < buildings.length; i++) { availableQuests.push(i); }
+
+    const woodMat = getMat(0x4e342e);
+    for (let t = 0; t < 8; t++) {
+      const angle = (t / 8) * Math.PI * 2;
+      const tPos = new THREE.Vector3(Math.cos(angle) * 16, Math.sin(angle) * 16, 0);
+      tPos.z = Math.sqrt(Math.max(0, planetRadius * planetRadius - tPos.x * tPos.x - tPos.y * tPos.y));
+      
+      const tree = new THREE.Group();
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 2.6, 6), woodMat); 
+      trunk.position.y = 1.2; trunk.castShadow = true; tree.add(trunk);
+      const root = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.65, 0.8, 6), woodMat);
+      root.position.y = -0.3; tree.add(root);
+      
+      const treeFoliageMat = getMat(0x2e7d32); seasonFoliageMaterials.push(treeFoliageMat);
+      const crown = new THREE.Mesh(new THREE.DodecahedronGeometry(1.8, 0), treeFoliageMat); 
+      crown.position.y = 3.2; crown.castShadow = true; tree.add(crown);
+      
+      anchorToPlanetSurface(tree, tPos, true); scene.add(tree);
+      colliders.push({ pos: tPos.clone(), radius: 1.4 });
+    }
+
+    const fountainGroup = new THREE.Group();
+    const fountainBasin = new THREE.Mesh(new THREE.CylinderGeometry(4, 4.3, 1.4, 8), getMat(0x90a4ae)); 
+    fountainBasin.position.y = 0.5; fountainGroup.add(fountainBasin);
+    const water = new THREE.Mesh(new THREE.CylinderGeometry(3.7, 3.7, 0.2, 8), getMat(0x0288d1)); 
+    water.position.y = 1.1; fountainGroup.add(water);
+    const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 2.4, 6), getMat(0x90a4ae)); 
+    spout.position.y = 1.6; fountainGroup.add(spout);
+    anchorToPlanetSurface(fountainGroup, plazaCenter, false); scene.add(fountainGroup);
+    colliders.push({ pos: plazaCenter.clone(), radius: 4.5 });
+
+    function createSolidDecor(surfacePos, typeIndex) {
+      const dGroup = new THREE.Group();
+      let colRadius = 1.0;
+
+      switch(typeIndex % 6) {
+        case 0:
+          const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 4.4, 6), getMat(0x455a64)); 
+          pole.position.y = 2.0; pole.castShadow = true; dGroup.add(pole);
+          const lampHead = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.4, 0.8), getMat(0x263238)); 
+          lampHead.position.y = 4.2; dGroup.add(lampHead);
+          const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 8), new THREE.MeshStandardMaterial({ color: 0xfff59d, emissive: 0x000000, roughness: 0.3 })); 
+          bulb.position.y = 4.0; dGroup.add(bulb);
+          streetLampBulbs.push(bulb); colRadius = 0.9; break;
+        case 1:
+          const seat = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.2, 0.8), getMat(0x5d4037)); 
+          seat.position.y = 0.55; seat.castShadow = true; dGroup.add(seat);
+          const back = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.8, 0.15), getMat(0x5d4037)); 
+          back.position.set(0, 0.95, -0.35); back.castShadow = true; dGroup.add(back);
+          const leg1 = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.7, 0.7), getMat(0x263238)); 
+          leg1.position.set(-0.8, 0.25, 0); dGroup.add(leg1);
+          const leg2 = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.7, 0.7), getMat(0x263238)); 
+          leg2.position.set(0.8, 0.25, 0); dGroup.add(leg2);
+          colRadius = 1.25; break;
+        case 2:
+          const c1 = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 1.2), getMat(0x795548)); 
+          c1.position.y = 0.55; c1.castShadow = true; dGroup.add(c1);
+          colRadius = 1.35; break;
+        case 3:
+          const rockSize = 0.7 + Math.random() * 0.7;
+          const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(rockSize, 0), getMat(0x78909c)); 
+          rock.position.y = rockSize * 0.4; rock.castShadow = true; dGroup.add(rock);
+          colRadius = rockSize + 0.3; break;
+        case 4:
+          const hedgeMat = getMat(0x2e7d32); seasonFoliageMaterials.push(hedgeMat);
+          const planter = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.6, 1.0), getMat(0x37474f));
+          planter.position.y = 0.2; planter.castShadow = true; dGroup.add(planter);
+          const hedge = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.0, 0.8), hedgeMat); 
+          hedge.position.y = 0.8; hedge.castShadow = true; dGroup.add(hedge);
+          colRadius = 1.3; break;
+        case 5:
+          const hydrant = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.35, 1.2, 8), getMat(0xd32f2f)); 
+          hydrant.position.y = 0.5; hydrant.castShadow = true; dGroup.add(hydrant);
+          colRadius = 0.75; break;
+      }
+      anchorToPlanetSurface(dGroup, surfacePos, true); scene.add(dGroup);
+      colliders.push({ pos: surfacePos.clone(), radius: colRadius });
+    }
+
+    for (let i = 0; i < 500; i++) {
+      const phi = Math.acos(-1 + (2 * Math.random())); const theta = Math.random() * Math.PI * 2;
+      const dPos = new THREE.Vector3().setFromSphericalCoords(planetRadius, phi, theta);
+      if (dPos.distanceTo(plazaCenter) > 22) createSolidDecor(dPos, i);
+    }
+
+    // --- FIREWORKS SYSTEM ---
+    const fireworkCount = 500;
+    const fwGeo = new THREE.BufferGeometry();
+    const fwPos = new Float32Array(fireworkCount * 3);
+    const fwVel = [];
+    for (let i = 0; i < fireworkCount; i++) {
+      fwPos[i * 3] = 0; fwPos[i * 3 + 1] = 0; fwPos[i * 3 + 2] = 0;
+      fwVel.push(new THREE.Vector3((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2));
+    }
+    fwGeo.setAttribute('position', new THREE.BufferAttribute(fwPos, 3));
+    const fwMat = new THREE.PointsMaterial({ color: 0xffea00, size: 1.2, transparent: true, opacity: 1, blending: THREE.AdditiveBlending });
+    const fireworksSystem = new THREE.Points(fwGeo, fwMat);
+    fireworksSystem.visible = false; scene.add(fireworksSystem);
+
+    let fireworksActive = false; let fwTimer = 0;
+    function triggerFireworks() {
+      const pNorm = player.position.clone().normalize();
+      fireworksSystem.position.copy(player.position).add(pNorm.multiplyScalar(15));
+      fwMat.color.setHex(Math.random() * 0xffffff); fwMat.opacity = 1;
+      
+      const positions = fwGeo.attributes.position.array;
+      for (let i = 0; i < fireworkCount; i++) {
+        positions[i * 3] = 0; positions[i * 3 + 1] = 0; positions[i * 3 + 2] = 0;
+        fwVel[i].set((Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5);
+      }
+      fwGeo.attributes.position.needsUpdate = true;
+      fireworksSystem.visible = true; fireworksActive = true; fwTimer = 0;
+    }
+
+    // --- CHARACTER GENERATOR HELPER (Local & Remote) ---
+    function buildCharacterMesh(suitColorHex) {
+      const charGroup = new THREE.Group();
+      const suitMat = getMat(suitColorHex);
+      const skinMat = getMat(0xffb787);
+      const whiteMat = getMat(0xfcfcfc);
+      const darkMat = getMat(0x1565c0);
+
+      const torso = new THREE.Group(); torso.position.y = 1.05; charGroup.add(torso);
+      const jacket = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.52, 1.25, 6), suitMat);
+      jacket.scale.set(1, 1, 0.75); jacket.castShadow = true; torso.add(jacket);
+      const shirt = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.15, 0.76), whiteMat);
+      shirt.position.set(0, 0.05, 0.04); torso.add(shirt);
+      
+      const lArm = new THREE.Group(); lArm.position.set(-0.66, 0.5, 0); torso.add(lArm);
+      const lSleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.14, 0.75, 6), suitMat);
+      lSleeve.position.y = -0.32; lSleeve.castShadow = true; lArm.add(lSleeve);
+      const rArm = new THREE.Group(); rArm.position.set(0.66, 0.5, 0); torso.add(rArm);
+      const rSleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.14, 0.75, 6), suitMat);
+      rSleeve.position.y = -0.32; rSleeve.castShadow = true; rArm.add(rSleeve);
+      
+      const head = new THREE.Group(); head.position.set(0, 0.88, 0); torso.add(head);
+      const headMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(0.48, 1), skinMat);
+      headMesh.scale.set(0.96, 1, 0.94); headMesh.castShadow = true; head.add(headMesh);
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.53, 0.4, 8), suitMat);
+      cap.position.y = 0.3; cap.castShadow = true; head.add(cap);
+      const visor = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.06, 0.5), suitMat);
+      visor.position.set(0, 0.18, 0.35); head.add(visor);
+
+      const lLeg = new THREE.Group(); lLeg.position.set(-0.25, 0.4, 0); charGroup.add(lLeg);
+      const lPant = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.14, 0.75, 6), darkMat);
+      lPant.position.y = -0.22; lPant.castShadow = true; lLeg.add(lPant);
+      const rLeg = new THREE.Group(); rLeg.position.set(0.25, 0.4, 0); charGroup.add(rLeg);
+      const rPant = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.14, 0.75, 6), darkMat);
+      rPant.position.y = -0.22; rPant.castShadow = true; rLeg.add(rPant);
+
+      return { root: charGroup, torso, head, lArm, rArm, lLeg, rLeg };
+    }
+
+    // Local Player
+    const localCharParts = buildCharacterMesh(0x1976d2);
+    const player = localCharParts.root;
+    const spawnPos = new THREE.Vector3(0, -9.0, Math.sqrt(planetRadius * planetRadius - 81)).normalize().multiplyScalar(planetRadius);
+    player.position.copy(spawnPos); 
+    scene.add(player);
+
+    const initNormal = player.position.clone().normalize();
+    const initForward = new THREE.Vector3(0, 1, 0).projectOnPlane(initNormal).normalize();
+    const initRight = new THREE.Vector3().crossVectors(initNormal, initForward).normalize();
+    player.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(initRight, initNormal, initForward));
+
+    const camDist = 22; const camHeight = 15;
+    let currentTrailDir = initForward.clone().negate();
+    camera.position.copy(player.position).add(currentTrailDir.clone().multiplyScalar(camDist)).add(initNormal.clone().multiplyScalar(camHeight));
+    camera.up.copy(initNormal); camera.lookAt(player.position.clone().add(initNormal.clone().multiplyScalar(2.6)));
+
+    // --- GLOWING QUEST BEACON ---
+    beaconGroup = new THREE.Group();
+    const beaconCore = new THREE.Mesh(new THREE.OctahedronGeometry(2.0, 0), new THREE.MeshBasicMaterial({ color: 0xffffff })); beaconGroup.add(beaconCore);
+    beaconAura = new THREE.Mesh(new THREE.OctahedronGeometry(2.8, 0), new THREE.MeshBasicMaterial({ color: 0xffea00, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false })); beaconGroup.add(beaconAura);
+    beaconLight = new THREE.PointLight(0xffea00, 2.5, 30); beaconGroup.add(beaconLight);
+    questHighlightMaterial = new THREE.LineBasicMaterial({ color: 0xffea00, linewidth: 3, transparent: true, opacity: 1.0 });
+
+    // --- LOBBY & MULTIPLAYER FLOW ---
+    function selectGrade(g) {
+      playerGrade = g;
+      document.getElementById('step-grade').style.display = 'none';
+      document.getElementById('step-mode').style.display = 'block';
+    }
+
+    function backToMode() {
+      document.getElementById('step-join').style.display = 'none';
+      document.getElementById('step-host').style.display = 'none';
+      document.getElementById('step-mode').style.display = 'block';
+    }
+
+    function startSolo() {
+      document.getElementById('start-modal').style.display = 'none';
+      document.getElementById('hud-room').innerText = "SOLO";
+      document.getElementById('hud-players').innerText = "1";
+      document.getElementById('inst-text').innerText = `Math Curriculum Active (Grade ${playerGrade})`;
+      gameState = 'playing'; clock.start();
+      setTimeout(assignNewQuest, 1500);
+    }
+
+    function generateRoomCode() {
+      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      let code = "";
+      for (let i = 0; i < 4; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+      return code;
+    }
+
+    function showHostUI() {
+      document.getElementById('step-mode').style.display = 'none';
+      document.getElementById('step-host').style.display = 'block';
+      
+      currentRoomCode = generateRoomCode();
+      const hostPeerId = "math-metropolis-" + currentRoomCode;
+      document.getElementById('host-code-display').innerText = currentRoomCode;
+
+      myPeer = new Peer(hostPeerId);
+      isHost = true;
+      isMultiplayer = true;
+
+      myPeer.on('open', (id) => {
+        document.getElementById('host-status').innerText = "Room created! Waiting for students to connect...";
+      });
+
+      myPeer.on('connection', (conn) => {
+        handleIncomingConnection(conn);
+      });
+
+      myPeer.on('error', (err) => {
+        console.warn("PeerJS Host Error:", err);
+        if (err.type === 'unavailable-id') {
+          showHostUI(); // Try a new random code
+        }
+      });
+    }
+
+    function launchMultiplayerGame() {
+      document.getElementById('start-modal').style.display = 'none';
+      document.getElementById('hud-room').innerText = currentRoomCode;
+      document.getElementById('hud-players').innerText = String(Object.keys(clientConnections).length + 1);
+      document.getElementById('inst-text').innerText = `Classroom Room ${currentRoomCode} Active!`;
+      gameState = 'playing'; clock.start();
+      setTimeout(assignNewQuest, 1500);
+      startNetworkBroadcastLoop();
+    }
+
+    function showJoinUI() {
+      document.getElementById('step-mode').style.display = 'none';
+      document.getElementById('step-join').style.display = 'block';
+      document.getElementById('join-status').innerText = "";
+    }
+
+    function joinRoom() {
+      const rawCode = document.getElementById('join-code-input').value.trim().toUpperCase();
+      if (rawCode.length < 4) {
+        document.getElementById('join-status').innerText = "Please enter a valid 4-character code.";
+        return;
+      }
+      document.getElementById('join-status').innerText = "Connecting to session...";
+      currentRoomCode = rawCode;
+      const targetHostId = "math-metropolis-" + rawCode;
+
+      myPeer = new Peer();
+      isHost = false;
+      isMultiplayer = true;
+
+      myPeer.on('open', () => {
+        hostConnection = myPeer.connect(targetHostId);
+        
+        hostConnection.on('open', () => {
+          document.getElementById('start-modal').style.display = 'none';
+          document.getElementById('hud-room').innerText = currentRoomCode;
+          document.getElementById('inst-text').innerText = `Connected to Room ${currentRoomCode}!`;
+          gameState = 'playing'; clock.start();
+          startNetworkBroadcastLoop();
+        });
+
+        hostConnection.on('data', (data) => {
+          handleNetworkMessage(data);
+        });
+
+        hostConnection.on('close', () => {
+          document.getElementById('inst-text').innerText = "Host closed session.";
+        });
+      });
+
+      myPeer.on('error', (err) => {
+        document.getElementById('join-status').innerText = "Could not find room. Check code & try again.";
+      });
+    }
+
+    // --- NETWORK MESSAGE HANDLING ---
+    function handleIncomingConnection(conn) {
+      clientConnections[conn.peer] = conn;
+      updatePlayerCountHUD();
+
+      // Send initial state to joined client
+      conn.on('open', () => {
+        conn.send({
+          type: 'init_sync',
+          grade: playerGrade,
+          score: correctAnswersCount,
+          questIndex: questTargetIndex
+        });
+      });
+
+      conn.on('data', (data) => {
+        handleNetworkMessage(data, conn.peer);
+        // Host relays data to all other peers (Star Topology)
+        for (let otherId in clientConnections) {
+          if (otherId !== conn.peer && clientConnections[otherId].open) {
+            clientConnections[otherId].send(data);
+          }
+        }
+      });
+
+      conn.on('close', () => {
+        removeRemotePlayer(conn.peer);
+        delete clientConnections[conn.peer];
+        updatePlayerCountHUD();
+      });
+    }
+
+    function updatePlayerCountHUD() {
+      const total = Object.keys(clientConnections).length + 1;
+      document.getElementById('hud-players').innerText = String(total);
+    }
+
+    function createRemotePlayer(peerId) {
+      const colorIndex = Object.keys(remotePlayers).length % suitColorPalette.length;
+      const color = suitColorPalette[colorIndex];
+      const char = buildCharacterMesh(color);
+      scene.add(char.root);
+      remotePlayers[peerId] = {
+        parts: char,
+        targetPos: new THREE.Vector3(),
+        targetQuat: new THREE.Quaternion(),
+        walkCycle: 0
+      };
+      return remotePlayers[peerId];
+    }
+
+    function removeRemotePlayer(peerId) {
+      if (remotePlayers[peerId]) {
+        scene.remove(remotePlayers[peerId].parts.root);
+        delete remotePlayers[peerId];
+      }
+    }
+
+    function handleNetworkMessage(data, senderId) {
+      if (data.type === 'player_transform') {
+        const id = data.peerId;
+        if (!remotePlayers[id]) createRemotePlayer(id);
+        const rp = remotePlayers[id];
+        rp.targetPos.set(data.x, data.y, data.z);
+        rp.targetQuat.set(data.qx, data.qy, data.qz, data.qw);
+        rp.walkCycle = data.walkCycle;
+      }
+      else if (data.type === 'init_sync') {
+        playerGrade = data.grade;
+        correctAnswersCount = data.score;
+        document.getElementById('hud-score').innerText = String(correctAnswersCount);
+        if (data.questIndex >= 0) syncQuestBuilding(data.questIndex);
+      }
+      else if (data.type === 'quest_assign') {
+        syncQuestBuilding(data.index);
+      }
+      else if (data.type === 'quest_flag') {
+        placeNetworkFlag(data.buildingIndex, data.success);
+      }
+    }
+
+    function syncQuestBuilding(idx) {
+      if (questHighlightGroup && buildings[questTargetIndex]) {
+        buildings[questTargetIndex].group.remove(beaconGroup);
+        buildings[questTargetIndex].group.remove(questHighlightGroup);
+      }
+      questTargetIndex = idx;
+      if (buildings[questTargetIndex]) {
+        const target = buildings[questTargetIndex];
+        beaconGroup.position.set(0, target.topY + 6, 0); 
+        target.group.add(beaconGroup);
+
+        questHighlightGroup = new THREE.Group();
+        target.group.traverse((child) => {
+          if (child.isMesh && child !== beaconCore && child !== beaconAura) {
+            const edges = new THREE.EdgesGeometry(child.geometry, 25);
+            const line = new THREE.LineSegments(edges, questHighlightMaterial);
+            line.position.copy(child.position); line.rotation.copy(child.rotation); line.scale.copy(child.scale);
+            questHighlightGroup.add(line);
+          }
+        });
+        target.group.add(questHighlightGroup);
+      }
+    }
+
+    function placeNetworkFlag(idx, success) {
+      if (buildings[idx]) {
+        const target = buildings[idx];
+        target.group.remove(beaconGroup);
+        if (questHighlightGroup) { target.group.remove(questHighlightGroup); questHighlightGroup = null; }
+        
+        const flag = createFlag(success ? 0x00e676 : 0xd32f2f);
+        flag.position.set(target.radius * 0.85, 0, target.radius * 0.85);
+        target.group.add(flag); 
+        target.completed = true;
+
+        if (success) {
+          correctAnswersCount++;
+          document.getElementById('hud-score').innerText = String(correctAnswersCount);
+          document.getElementById('inst-text').innerText = "Teammate solved the quest! Green Flag raised!";
+          if (correctAnswersCount % 10 === 0) triggerFireworks();
+        }
+      }
+    }
+
+    // 20Hz Broadcast Loop
+    function startNetworkBroadcastLoop() {
+      setInterval(() => {
+        if (!isMultiplayer || !myPeer) return;
+        const msg = {
+          type: 'player_transform',
+          peerId: myPeer.id,
+          x: player.position.x, y: player.position.y, z: player.position.z,
+          qx: player.quaternion.x, qy: player.quaternion.y, qz: player.quaternion.z, qw: player.quaternion.w,
+          walkCycle: walkCycle
+        };
+
+        if (isHost) {
+          for (let id in clientConnections) {
+            if (clientConnections[id].open) clientConnections[id].send(msg);
+          }
+        } else if (hostConnection && hostConnection.open) {
+          hostConnection.send(msg);
+        }
+      }, 50);
+    }
+
+    // Broadcast quest events across peers
+    function broadcastQuestAssign(index) {
+      if (!isMultiplayer) return;
+      const msg = { type: 'quest_assign', index: index };
+      if (isHost) {
+        for (let id in clientConnections) {
+          if (clientConnections[id].open) clientConnections[id].send(msg);
+        }
+      }
+    }
+
+    function broadcastQuestFlag(buildingIndex, success) {
+      if (!isMultiplayer) return;
+      const msg = { type: 'quest_flag', buildingIndex: buildingIndex, success: success };
+      if (isHost) {
+        for (let id in clientConnections) {
+          if (clientConnections[id].open) clientConnections[id].send(msg);
+        }
+      } else if (hostConnection && hostConnection.open) {
+        hostConnection.send(msg);
+      }
+    }
+
+    // --- GAME FLOW LOGIC ---
+    function continueGame() { document.getElementById('milestone-modal').style.display = 'none'; gameState = 'playing'; startQuestCooldown(); }
+    function stopGame() {
+      document.getElementById('milestone-modal').style.display = 'none'; gameState = 'explore';
+      document.getElementById('inst-text').innerText = "Explore Mode (No Quests)";
+      if (beaconGroup.parent) beaconGroup.parent.remove(beaconGroup);
+      if (questHighlightGroup && questHighlightGroup.parent) questHighlightGroup.parent.remove(questHighlightGroup);
+    }
+    function startQuestCooldown() {
+      if (gameState !== 'playing') return;
+      gameState = 'cooldown'; questTargetIndex = -1;
+      setTimeout(assignNewQuest, Math.floor(10000 + Math.random() * 10000));
+    }
+
+    function assignNewQuest() {
+      if (gameState !== 'cooldown' && gameState !== 'playing') return;
+      if (availableQuests.length === 0) { document.getElementById('inst-text').innerText = "All City Quests Completed!"; return; }
+      
+      const poolIndex = Math.floor(Math.random() * availableQuests.length);
+      questTargetIndex = availableQuests[poolIndex];
+      availableQuests.splice(poolIndex, 1);
+
+      syncQuestBuilding(questTargetIndex);
+      broadcastQuestAssign(questTargetIndex);
+      gameState = 'playing';
+    }
+
+    function createFlag(colorHex) {
+      const flagGroup = new THREE.Group();
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 4.2, 6), getMat(0x90a4ae)); 
+      pole.position.y = 1.6; pole.castShadow = true;
+      const fabric = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.0, 0.08), getMat(colorHex)); 
+      fabric.position.set(0.75, 3.1, 0); fabric.castShadow = true;
+      flagGroup.add(pole, fabric); return flagGroup;
+    }
+
+    function triggerQuestPrompt() {
+      if (gameState !== 'playing' || !interactInRange) return;
+      gameState = 'prompt'; document.getElementById('interact-btn').style.display = 'none';
+      
+      const qData = generateMathQuestion(playerGrade);
+      document.getElementById('quest-question').innerText = qData.q;
+      for (let i = 0; i < 3; i++) {
+        let btn = document.getElementById(`ans-${i}`); btn.innerText = qData.a[i];
+        btn.onclick = () => { processAnswer(i === qData.correct); };
+      }
+      document.getElementById('quest-modal').style.display = 'flex';
+    }
+
+    function processAnswer(success) {
+      document.getElementById('quest-modal').style.display = 'none';
+      const target = buildings[questTargetIndex];
+      target.group.remove(beaconGroup);
+      
+      if (questHighlightGroup) { 
+        target.group.remove(questHighlightGroup); 
+        questHighlightGroup.traverse(c => { if (c.geometry) c.geometry.dispose(); });
+        questHighlightGroup = null; 
+      }
+
+      const flag = createFlag(success ? 0x00e676 : 0xd32f2f);
+      flag.position.set(target.radius * 0.85, 0, target.radius * 0.85);
+      target.group.add(flag); target.completed = true; 
+
+      broadcastQuestFlag(questTargetIndex, success);
+      
+      if (success) {
+        correctAnswersCount++; 
+        document.getElementById('hud-score').innerText = String(correctAnswersCount);
+        document.getElementById('inst-text').innerText = "Correct! Green Flag Raised!"; interactInRange = false;
+        if (correctAnswersCount > 0 && correctAnswersCount % 10 === 0) {
+          triggerFireworks(); gameState = 'milestone';
+          setTimeout(() => { document.getElementById('milestone-modal').style.display = 'flex'; }, 1500);
+        } else { startQuestCooldown(); }
+      } else {
+        document.getElementById('inst-text').innerText = "Incorrect! Red Flag Raised."; interactInRange = false; startQuestCooldown();
+      }
+    }
+
+    // --- CONTROLS ---
+    window.addEventListener('keydown', (e) => {
+      if (keys.hasOwnProperty(e.key)) keys[e.key] = true;
+      if (e.key === ' ' || e.code === 'Space') { 
+        e.preventDefault(); 
+        if (isGrounded && gameState !== 'prompt' && gameState !== 'start') { radialVelocity = jumpStrength; isGrounded = false; } 
+      }
+      if (e.key === 'r' || e.key === 'R') triggerQuestPrompt();
+    });
+    window.addEventListener('keyup', (e) => { if (keys.hasOwnProperty(e.key)) keys[e.key] = false; });
+
+    const joystickZone = document.getElementById('joystick-zone'); const joystickKnob = document.getElementById('joystick-knob');
+    const jumpBtn = document.getElementById('jump-btn'); const interactBtn = document.getElementById('interact-btn');
+    let center = { x: 0, y: 0 }; const maxDist = 40;
+
+    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+      joystickZone.style.display = 'block'; jumpBtn.style.display = 'flex';
+    }
+
+    joystickZone.addEventListener('touchstart', (e) => {
+      isDragging = true; center = { x: joystickZone.getBoundingClientRect().left + 55, y: joystickZone.getBoundingClientRect().top + 55 };
+      joystickKnob.style.transition = 'none'; updateJoystick(e.touches[0]);
+    }, {passive: false});
+    joystickZone.addEventListener('touchmove', (e) => { if (isDragging) updateJoystick(e.touches[0]); }, {passive: false});
+    joystickZone.addEventListener('touchend', () => {
+      isDragging = false; joyX = 0; joyY = 0;
+      joystickKnob.style.transition = 'transform 0.15s ease-out'; joystickKnob.style.transform = `translate(0px, 0px)`;
+    }, {passive: false});
+
+    jumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); if (isGrounded && gameState !== 'prompt' && gameState !== 'start') { radialVelocity = jumpStrength; isGrounded = false; } }, {passive: false});
+    interactBtn.addEventListener('touchstart', (e) => { e.preventDefault(); triggerQuestPrompt(); }, {passive: false});
+
+    function updateJoystick(touch) {
+      let dx = touch.clientX - center.x; let dy = touch.clientY - center.y;
+      let dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > maxDist) { dx = (dx / dist) * maxDist; dy = (dy / dist) * maxDist; }
+      joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`; joyX = dx / maxDist; joyY = dy / maxDist;
+    }
+
+    // --- COMPASS ---
+    const compCanvas = document.getElementById('compassCanvas'); const compCtx = compCanvas.getContext('2d');
+    function resizeCanvas() {
+      compCanvas.width = window.innerWidth; compCanvas.height = 46;
+      camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); 
+    }
+    window.addEventListener('resize', resizeCanvas); resizeCanvas();
+
+    function updateDirectionCompass(questRelAngleDeg, questDistMeters, cumulativeYawDeg) {
+      const W = compCanvas.width; compCtx.clearRect(0, 0, W, 46);
+      compCtx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; compCtx.lineWidth = 1;
+      compCtx.beginPath(); compCtx.moveTo(0, 24); compCtx.lineTo(W, 24); compCtx.stroke();
+      
+      const halfFovDeg = 80; const pxPerDeg = (W * 0.44) / halfFovDeg; 
+      const tickSpacingDeg = 10; const centerX = W / 2;
+      
+      let centerDeg = cumulativeYawDeg;
+      let startDeg = Math.floor((centerDeg - halfFovDeg - 10) / tickSpacingDeg) * tickSpacingDeg;
+      let endDeg = Math.ceil((centerDeg + halfFovDeg + 10) / tickSpacingDeg) * tickSpacingDeg;
+
+      for (let deg = startDeg; deg <= endDeg; deg += tickSpacingDeg) {
+        let offsetDeg = deg - centerDeg;
+        let drawX = centerX + offsetDeg * pxPerDeg;
+        let isMajor = (deg % 30 === 0);
+        
+        compCtx.strokeStyle = isMajor ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.28)';
+        compCtx.lineWidth = isMajor ? 1.5 : 1;
+        compCtx.beginPath(); compCtx.moveTo(drawX, isMajor ? 14 : 19); compCtx.lineTo(drawX, 24); compCtx.stroke();
+      }
+      compCtx.fillStyle = '#ff3d00'; compCtx.font = 'bold 10px sans-serif'; compCtx.textAlign = 'center'; compCtx.fillText('FORWARD', W / 2, 36);
+
+      if (questRelAngleDeg !== null && gameState === 'playing') {
+        compCtx.save();
+        if (Math.abs(questRelAngleDeg) <= 75) {
+          const qX = centerX + questRelAngleDeg * pxPerDeg;
+          compCtx.fillStyle = '#ffea00'; compCtx.shadowColor = '#ffea00'; compCtx.shadowBlur = 8;
+          compCtx.beginPath(); compCtx.moveTo(qX, 7); compCtx.lineTo(qX + 6, 14); compCtx.lineTo(qX, 21); compCtx.lineTo(qX - 6, 14); compCtx.fill();
+          compCtx.beginPath(); compCtx.moveTo(qX - 3.5, 24); compCtx.lineTo(qX + 3.5, 24); compCtx.lineTo(qX, 30); compCtx.fill();
+          compCtx.font = 'bold 11px sans-serif'; compCtx.fillText(`${questDistMeters}m`, qX, 42);
+        } else {
+          const isRight = questRelAngleDeg > 0; 
+          const aX = isRight ? W - 38 : 38; 
+          const dir = isRight ? 1 : -1;
+
+          compCtx.fillStyle = '#ffea00'; compCtx.shadowColor = '#ffea00'; compCtx.shadowBlur = 8;
+          compCtx.beginPath(); compCtx.moveTo(aX - dir * 8, 11); compCtx.lineTo(aX + dir * 6, 18); compCtx.lineTo(aX - dir * 8, 25); compCtx.fill();
+          compCtx.beginPath(); compCtx.arc(aX - dir * 10, 18, 3, 0, Math.PI * 2); compCtx.fill();
+          compCtx.textAlign = isRight ? 'right' : 'left'; compCtx.fillText(`${questDistMeters}m`, isRight ? W - 58 : 58, 22);
+        }
+        compCtx.restore();
+      }
+    }
+
+    // --- MAIN ENGINE ANIMATION LOOP ---
+    let walkCycle = 0; let prevCamForward = initForward.clone(); let cumulativeCameraYawDeg = 0;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (gameState === 'start') { renderer.render(scene, camera); return; }
+
+      // Fireworks
+      if (fireworksActive) {
+        fwTimer++; const pos = fwGeo.attributes.position.array;
+        for (let i = 0; i < 500; i++) {
+          pos[i * 3] += fwVel[i].x; pos[i * 3 + 1] += fwVel[i].y; pos[i * 3 + 2] += fwVel[i].z;
+          fwVel[i].y -= 0.04;
+        }
+        fwGeo.attributes.position.needsUpdate = true;
+        fwMat.opacity = Math.max(0, 1 - fwTimer / 120);
+        if (fwTimer > 120) { fireworksActive = false; fireworksSystem.visible = false; }
+      }
+
+      if (gameState === 'playing' && beaconGroup) {
+        beaconGroup.rotation.y += 0.025;
+        beaconAura.scale.set(1 + Math.sin(Date.now() * 0.006) * 0.15, 1 + Math.sin(Date.now() * 0.006) * 0.15, 1 + Math.sin(Date.now() * 0.006) * 0.15);
+        if (questHighlightMaterial) questHighlightMaterial.opacity = 0.5 + Math.sin(Date.now() * 0.007) * 0.5;
+      }
+
+      // Smooth Interpolation of Remote Peers
+      for (let id in remotePlayers) {
+        const rp = remotePlayers[id];
+        rp.parts.root.position.lerp(rp.targetPos, 0.2);
+        rp.parts.root.quaternion.slerp(rp.targetQuat, 0.2);
+        
+        // Remote walking gait
+        rp.parts.lArm.rotation.x = Math.sin(rp.walkCycle) * 0.75;
+        rp.parts.rArm.rotation.x = -Math.sin(rp.walkCycle) * 0.75;
+        rp.parts.lLeg.rotation.x = -Math.sin(rp.walkCycle) * 0.65;
+        rp.parts.rLeg.rotation.x = Math.sin(rp.walkCycle) * 0.65;
+        rp.parts.torso.position.y = 1.05 + Math.abs(Math.sin(rp.walkCycle * 2)) * 0.08;
+      }
+
+      // Input Movement
+      let mX = 0, mZ = 0;
+      if (gameState === 'playing' || gameState === 'cooldown' || gameState === 'explore') {
+        if (keys.w || keys.ArrowUp) mZ -= 1; if (keys.s || keys.ArrowDown) mZ += 1;
+        if (keys.a || keys.ArrowLeft) mX -= 1; if (keys.d || keys.ArrowRight) mX += 1;
+        if (joyX !== 0 || joyY !== 0) { mX = joyX; mZ = joyY; }
+      }
+
+      let pGround = player.position.clone().normalize().multiplyScalar(planetRadius);
+      let pNorm = pGround.clone().normalize();
+
+      let cFwd = camera.position.clone().sub(pGround).projectOnPlane(pNorm).normalize().negate(); 
+      let cRight = new THREE.Vector3().crossVectors(cFwd, pNorm).normalize();
+      
+      let dMove = new THREE.Vector3();
+      if (mZ !== 0) dMove.add(cFwd.clone().multiplyScalar(-mZ));
+      if (mX !== 0) dMove.add(cRight.clone().multiplyScalar(mX));
+
+      // Solid Collision Resolution
+      if (dMove.lengthSq() > 0) {
+        dMove.normalize().multiplyScalar(moveSpeed);
+        let tPos = pGround.clone().add(dMove).normalize().multiplyScalar(planetRadius);
+        
+        let col = false;
+        for (let i = 0; i < colliders.length; i++) {
+          if (tPos.distanceTo(colliders[i].pos) < colliders[i].radius + 0.9) { col = true; break; }
+        }
+        
+        if (!col) {
+          pGround.copy(tPos);
+        } else {
+          let sX = pGround.clone().add(cRight.clone().multiplyScalar(mX * moveSpeed)).normalize().multiplyScalar(planetRadius);
+          let sZ = pGround.clone().add(cFwd.clone().multiplyScalar(-mZ * moveSpeed)).normalize().multiplyScalar(planetRadius);
+          let cx = false, cz = false;
+          for (let i = 0; i < colliders.length; i++) {
+            if (sX.distanceTo(colliders[i].pos) < colliders[i].radius + 0.9) cx = true;
+            if (sZ.distanceTo(colliders[i].pos) < colliders[i].radius + 0.9) cz = true;
+          }
+          if (mX !== 0 && !cx) { pGround.copy(sX); dMove = cRight.clone().multiplyScalar(mX * moveSpeed); }
+          else if (mZ !== 0 && !cz) { pGround.copy(sZ); dMove = cFwd.clone().multiplyScalar(-mZ * moveSpeed); }
+          else dMove.set(0, 0, 0);
+        }
+
+        if (dMove.lengthSq() > 0) {
+          let walkNorm = pGround.clone().normalize();
+          const fwd = dMove.clone().normalize();
+          const rgt = new THREE.Vector3().crossVectors(walkNorm, fwd).normalize();
+          player.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(rgt, walkNorm, new THREE.Vector3().crossVectors(rgt, walkNorm).normalize()));
+          currentTrailDir.lerp(fwd.clone().negate(), 0.06).normalize();
+
+          if (isGrounded) {
+            walkCycle += 0.35;
+            localCharParts.lArm.rotation.x = Math.sin(walkCycle) * 0.75; localCharParts.rArm.rotation.x = -Math.sin(walkCycle) * 0.75;
+            localCharParts.lLeg.rotation.x = -Math.sin(walkCycle) * 0.65; localCharParts.rLeg.rotation.x = Math.sin(walkCycle) * 0.65;
+            localCharParts.lLeg.position.y = 0.4 + Math.max(0, -Math.sin(walkCycle) * 0.15); 
+            localCharParts.rLeg.position.y = 0.4 + Math.max(0, Math.sin(walkCycle) * 0.15);
+            localCharParts.torso.position.y = 1.05 + Math.abs(Math.sin(walkCycle * 2)) * 0.08; 
+            localCharParts.head.rotation.x = Math.sin(walkCycle * 2) * 0.05;
+          }
+        }
+      } 
+
+      // Safe Quest Prompt Range Check
+      if (gameState === 'playing' && questTargetIndex >= 0 && buildings[questTargetIndex]) {
+        const target = buildings[questTargetIndex];
+        if (pGround.distanceTo(target.pos) < target.radius + 10) {
+          if (!interactInRange) { 
+            interactInRange = true; 
+            document.getElementById('interact-btn').style.display = 'flex'; 
+            document.getElementById('inst-text').innerHTML = "Press <b>R</b> or Tap <b>QUEST</b> to answer!";
+          }
+        } else if (interactInRange) {
+          interactInRange = false; 
+          document.getElementById('interact-btn').style.display = 'none';
+          document.getElementById('inst-text').innerHTML = `Math Curriculum Active (Grade ${playerGrade})`;
+        }
+      }
+
+      if (!isGrounded) {
+        radialVelocity -= gravity; altitude += radialVelocity;
+        localCharParts.lArm.rotation.x = THREE.MathUtils.lerp(localCharParts.lArm.rotation.x, -0.4, 0.2); 
+        localCharParts.rArm.rotation.x = THREE.MathUtils.lerp(localCharParts.rArm.rotation.x, -0.4, 0.2);
+        localCharParts.lLeg.rotation.x = THREE.MathUtils.lerp(localCharParts.lLeg.rotation.x, 0.3, 0.2); 
+        localCharParts.rLeg.rotation.x = THREE.MathUtils.lerp(localCharParts.rLeg.rotation.x, 0.3, 0.2);
+        if (altitude <= 0) { altitude = 0; radialVelocity = 0; isGrounded = true; }
+      } else if (dMove.lengthSq() === 0) {
+        localCharParts.lArm.rotation.x *= 0.8; localCharParts.rArm.rotation.x *= 0.8; 
+        localCharParts.lLeg.rotation.x *= 0.8; localCharParts.rLeg.rotation.x *= 0.8;
+        localCharParts.lLeg.position.y = 0.4; localCharParts.rLeg.position.y = 0.4; 
+        localCharParts.torso.position.y = 1.05; localCharParts.head.rotation.x *= 0.8;
+      }
+
+      let finalNorm = pGround.clone().normalize();
+      player.position.copy(pGround).add(finalNorm.clone().multiplyScalar(altitude));
+
+      camera.position.lerp(pGround.clone().add(currentTrailDir.clone().multiplyScalar(camDist)).add(finalNorm.clone().multiplyScalar(camHeight + altitude * 0.4)), 0.08);
+      camera.up.copy(finalNorm); 
+      camera.lookAt(player.position.clone().add(finalNorm.clone().multiplyScalar(2.6)));
+
+      let camFwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+      let pFwdProj = prevCamForward.projectOnPlane(finalNorm).normalize();
+      let cFwdProj = camFwd.projectOnPlane(finalNorm).normalize();
+      
+      let pRightProj = new THREE.Vector3().crossVectors(pFwdProj, finalNorm).normalize();
+      let deltaCamYawDeg = Math.atan2(cFwdProj.dot(pRightProj), cFwdProj.dot(pFwdProj)) * (180 / Math.PI);
+      
+      cumulativeCameraYawDeg += deltaCamYawDeg;
+      prevCamForward.copy(camFwd);
+
+      let questRelAngleDeg = null; let questDistMeters = 0;
+      if (gameState === 'playing' && questTargetIndex >= 0 && buildings[questTargetIndex]) {
+        const target = buildings[questTargetIndex];
+        let toTargetFlat = target.pos.clone().sub(pGround).projectOnPlane(finalNorm).normalize();
+        
+        if (toTargetFlat.lengthSq() > 0.0001) {
+          let cRightProj = new THREE.Vector3().crossVectors(cFwdProj, finalNorm).normalize();
+          questRelAngleDeg = Math.atan2(toTargetFlat.dot(cRightProj), toTargetFlat.dot(cFwdProj)) * (180 / Math.PI); 
+        }
+        questDistMeters = Math.round(pGround.angleTo(buildings[questTargetIndex].pos) * planetRadius);
+      }
+      updateDirectionCompass(questRelAngleDeg, questDistMeters, cumulativeCameraYawDeg);
+
+      // Time & Seasons
+      const el = clock.getElapsedTime();
+      const yrFrac = (el % YEAR_DURATION) / YEAR_DURATION;
+      const tGrd = new THREE.Color([0x5a9e32, 0x2d7a27, 0x8a622a, 0xdce5ed][Math.floor(yrFrac * 4)]).lerp(new THREE.Color([0x5a9e32, 0x2d7a27, 0x8a622a, 0xdce5ed][(Math.floor(yrFrac * 4) + 1) % 4]), (yrFrac * 4) % 1);
+      planet.material.color.lerp(tGrd, 0.05);
+
+      const tFol = new THREE.Color([0xf472b6, 0x1e8234, 0xd9531e, 0xe0e7ff][Math.floor(yrFrac * 4)]).lerp(new THREE.Color([0xf472b6, 0x1e8234, 0xd9531e, 0xe0e7ff][(Math.floor(yrFrac * 4) + 1) % 4]), (yrFrac * 4) % 1);
+      seasonFoliageMaterials.forEach(m => m.color.lerp(tFol, 0.05));
+
+      const dAng = (el % DAY_DURATION) / DAY_DURATION * Math.PI * 2;
+      dirLight.position.set(Math.cos(dAng) * 260, Math.sin(dAng) * 230, Math.sin(dAng * 0.5) * 80);
+      moonLight.position.copy(dirLight.position).negate();
+      const isN = Math.sin(dAng) < -0.1;
+      
+      let tSky = new THREE.Color(0x7ec0ee);
+      if (Math.sin(dAng) < 0.25 && !isN) { 
+        tSky.setHex(0xfb923c); dirLight.color.setHex(0xffedd5); dirLight.intensity = Math.max(0.1, Math.sin(dAng) * 2.5); hemiLight.intensity = 0.45; 
+      } else if (isN) { 
+        tSky.setHex(0x0f172a); dirLight.intensity = 0; hemiLight.intensity = 0.18; 
+      } else { 
+        tSky.setHex(Math.floor(yrFrac * 4) === 3 ? 0x94a3b8 : 0x7ec0ee); dirLight.color.setHex(0xfff8e7); dirLight.intensity = 1.35; hemiLight.intensity = 0.55; 
+      }
+      scene.background.lerp(tSky, 0.08); scene.fog.color.lerp(tSky, 0.08);
+
+      const hrs = Math.floor((el % DAY_DURATION) / DAY_DURATION * 24); 
+      const mins = Math.floor(((el % DAY_DURATION) / DAY_DURATION * 24 - hrs) * 60);
+      document.getElementById('season-icon').innerText = ["🌸", "☀️", "🍂", "❄️"][Math.floor(yrFrac * 4)];
+      document.getElementById('season-name').innerText = ["SPRING", "SUMMER", "AUTUMN", "WINTER"][Math.floor(yrFrac * 4)];
+      document.getElementById('time-clock').innerText = `YEAR ${Math.floor(el / YEAR_DURATION) + 1} • DAY ${Math.floor((el % YEAR_DURATION) / DAY_DURATION) + 1} • ${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>
