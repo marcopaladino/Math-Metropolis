@@ -232,13 +232,13 @@
     let questHighlightGroup = null; let questHighlightMaterial = null;
     let interactInRange = false; let availableQuests = []; 
 
-    // --- PEERJS MULTIPLAYER ARCHITECTURE ---
+    // --- PEERJS MULTIPLAYER STATE ---
     let isMultiplayer = false;
     let isHost = false;
     let myPeer = null;
     let hostConnection = null;
-    const clientConnections = {}; // For host: peerId -> DataConnection
-    const remotePlayers = {};     // peerId -> { group, targetPos, targetQuat, walkCycle, ... }
+    const clientConnections = {};
+    const remotePlayers = {};
     let currentRoomCode = "SOLO";
 
     const suitColorPalette = [0xd32f2f, 0x388e3c, 0x7b1fa2, 0xf57c00, 0x0097a7, 0x5d4037, 0x455a64, 0xc2185b];
@@ -355,6 +355,7 @@
     planet.receiveShadow = true; 
     scene.add(planet);
 
+    // Perpendicular surface alignment
     function anchorToPlanetSurface(group, surfacePos, randomRotY = true) {
       group.position.copy(surfacePos);
       const normal = surfacePos.clone().normalize();
@@ -484,6 +485,7 @@
           hydrant.position.y = 0.5; hydrant.castShadow = true; dGroup.add(hydrant);
           colRadius = 0.75; break;
       }
+
       anchorToPlanetSurface(dGroup, surfacePos, true); scene.add(dGroup);
       colliders.push({ pos: surfacePos.clone(), radius: colRadius });
     }
@@ -523,7 +525,7 @@
       fireworksSystem.visible = true; fireworksActive = true; fwTimer = 0;
     }
 
-    // --- CHARACTER GENERATOR HELPER (Local & Remote) ---
+    // --- CHARACTER GENERATOR HELPER ---
     function buildCharacterMesh(suitColorHex) {
       const charGroup = new THREE.Group();
       const suitMat = getMat(suitColorHex);
@@ -627,7 +629,7 @@
       isHost = true;
       isMultiplayer = true;
 
-      myPeer.on('open', (id) => {
+      myPeer.on('open', () => {
         document.getElementById('host-status').innerText = "Room created! Waiting for students to connect...";
       });
 
@@ -638,7 +640,7 @@
       myPeer.on('error', (err) => {
         console.warn("PeerJS Host Error:", err);
         if (err.type === 'unavailable-id') {
-          showHostUI(); // Try a new random code
+          showHostUI();
         }
       });
     }
@@ -693,7 +695,7 @@
         });
       });
 
-      myPeer.on('error', (err) => {
+      myPeer.on('error', () => {
         document.getElementById('join-status').innerText = "Could not find room. Check code & try again.";
       });
     }
@@ -703,7 +705,6 @@
       clientConnections[conn.peer] = conn;
       updatePlayerCountHUD();
 
-      // Send initial state to joined client
       conn.on('open', () => {
         conn.send({
           type: 'init_sync',
@@ -715,7 +716,6 @@
 
       conn.on('data', (data) => {
         handleNetworkMessage(data, conn.peer);
-        // Host relays data to all other peers (Star Topology)
         for (let otherId in clientConnections) {
           if (otherId !== conn.peer && clientConnections[otherId].open) {
             clientConnections[otherId].send(data);
@@ -756,7 +756,7 @@
       }
     }
 
-    function handleNetworkMessage(data, senderId) {
+    function handleNetworkMessage(data) {
       if (data.type === 'player_transform') {
         const id = data.peerId;
         if (!remotePlayers[id]) createRemotePlayer(id);
@@ -773,9 +773,16 @@
       }
       else if (data.type === 'quest_assign') {
         syncQuestBuilding(data.index);
+        if (gameState === 'cooldown') {
+          gameState = 'playing';
+          document.getElementById('inst-text').innerHTML = `New Quest Active! (Grade ${playerGrade})`;
+        }
       }
       else if (data.type === 'quest_flag') {
         placeNetworkFlag(data.buildingIndex, data.success);
+        if (isHost) {
+          startQuestCooldown();
+        }
       }
     }
 
@@ -794,9 +801,16 @@
         target.group.traverse((child) => {
           if (child.isMesh && child !== beaconCore && child !== beaconAura) {
             const edges = new THREE.EdgesGeometry(child.geometry, 25);
-            const line = new THREE.LineSegments(edges, questHighlightMaterial);
-            line.position.copy(child.position); line.rotation.copy(child.rotation); line.scale.copy(child.scale);
-            questHighlightGroup.add(line);
+            const oAmt = 0.035; 
+            const thickOffsets = [
+              new THREE.Vector3(0,0,0), new THREE.Vector3(oAmt,0,0), new THREE.Vector3(-oAmt,0,0),
+              new THREE.Vector3(0,oAmt,0), new THREE.Vector3(0,-oAmt,0), new THREE.Vector3(0,0,oAmt), new THREE.Vector3(0,0,-oAmt)
+            ];
+            thickOffsets.forEach(offset => {
+              const line = new THREE.LineSegments(edges, questHighlightMaterial);
+              line.position.copy(child.position).add(offset); line.rotation.copy(child.rotation); line.scale.copy(child.scale);
+              questHighlightGroup.add(line);
+            });
           }
         });
         target.group.add(questHighlightGroup);
@@ -820,10 +834,16 @@
           document.getElementById('inst-text').innerText = "Teammate solved the quest! Green Flag raised!";
           if (correctAnswersCount % 10 === 0) triggerFireworks();
         }
+
+        // Close prompt if currently viewing this quest
+        if (gameState === 'prompt' && questTargetIndex === idx) {
+          document.getElementById('quest-modal').style.display = 'none';
+          gameState = 'cooldown';
+          interactInRange = false;
+        }
       }
     }
 
-    // 20Hz Broadcast Loop
     function startNetworkBroadcastLoop() {
       setInterval(() => {
         if (!isMultiplayer || !myPeer) return;
@@ -845,7 +865,6 @@
       }, 50);
     }
 
-    // Broadcast quest events across peers
     function broadcastQuestAssign(index) {
       if (!isMultiplayer) return;
       const msg = { type: 'quest_assign', index: index };
@@ -868,23 +887,38 @@
       }
     }
 
-    // --- GAME FLOW LOGIC ---
-    function continueGame() { document.getElementById('milestone-modal').style.display = 'none'; gameState = 'playing'; startQuestCooldown(); }
+    // --- GAME FLOW LOGIC (FIXED COOLDOWN TRANSITION) ---
+    function continueGame() { 
+      document.getElementById('milestone-modal').style.display = 'none'; 
+      startQuestCooldown(); 
+    }
+    
     function stopGame() {
-      document.getElementById('milestone-modal').style.display = 'none'; gameState = 'explore';
+      document.getElementById('milestone-modal').style.display = 'none'; 
+      gameState = 'explore';
       document.getElementById('inst-text').innerText = "Explore Mode (No Quests)";
       if (beaconGroup.parent) beaconGroup.parent.remove(beaconGroup);
       if (questHighlightGroup && questHighlightGroup.parent) questHighlightGroup.parent.remove(questHighlightGroup);
     }
+
+    // FIXED: Properly handles transition from 'prompt', 'playing', or milestone
     function startQuestCooldown() {
-      if (gameState !== 'playing') return;
-      gameState = 'cooldown'; questTargetIndex = -1;
-      setTimeout(assignNewQuest, Math.floor(10000 + Math.random() * 10000));
+      if (gameState === 'explore') return;
+      gameState = 'cooldown'; 
+      questTargetIndex = -1;
+      
+      // Solo player or multiplayer host manages the timer
+      if (!isMultiplayer || isHost) {
+        setTimeout(assignNewQuest, Math.floor(10000 + Math.random() * 10000));
+      }
     }
 
     function assignNewQuest() {
       if (gameState !== 'cooldown' && gameState !== 'playing') return;
-      if (availableQuests.length === 0) { document.getElementById('inst-text').innerText = "All City Quests Completed!"; return; }
+      if (availableQuests.length === 0) { 
+        document.getElementById('inst-text').innerText = "All City Quests Completed!"; 
+        return; 
+      }
       
       const poolIndex = Math.floor(Math.random() * availableQuests.length);
       questTargetIndex = availableQuests[poolIndex];
@@ -893,6 +927,7 @@
       syncQuestBuilding(questTargetIndex);
       broadcastQuestAssign(questTargetIndex);
       gameState = 'playing';
+      document.getElementById('inst-text').innerHTML = `New Quest Active! (Grade ${playerGrade})`;
     }
 
     function createFlag(colorHex) {
@@ -906,7 +941,8 @@
 
     function triggerQuestPrompt() {
       if (gameState !== 'playing' || !interactInRange) return;
-      gameState = 'prompt'; document.getElementById('interact-btn').style.display = 'none';
+      gameState = 'prompt'; 
+      document.getElementById('interact-btn').style.display = 'none';
       
       const qData = generateMathQuestion(playerGrade);
       document.getElementById('quest-question').innerText = qData.q;
@@ -919,31 +955,44 @@
 
     function processAnswer(success) {
       document.getElementById('quest-modal').style.display = 'none';
-      const target = buildings[questTargetIndex];
-      target.group.remove(beaconGroup);
       
-      if (questHighlightGroup) { 
-        target.group.remove(questHighlightGroup); 
-        questHighlightGroup.traverse(c => { if (c.geometry) c.geometry.dispose(); });
-        questHighlightGroup = null; 
+      // Reset input keys to prevent stuck directional movement
+      keys.w = keys.a = keys.s = keys.d = keys.ArrowUp = keys.ArrowDown = keys.ArrowLeft = keys.ArrowRight = keys[' '] = false;
+      joyX = 0; joyY = 0;
+
+      const target = buildings[questTargetIndex];
+      if (target) {
+        target.group.remove(beaconGroup);
+        if (questHighlightGroup) { 
+          target.group.remove(questHighlightGroup); 
+          questHighlightGroup.traverse(c => { if (c.geometry) c.geometry.dispose(); });
+          questHighlightGroup = null; 
+        }
+
+        const flag = createFlag(success ? 0x00e676 : 0xd32f2f);
+        flag.position.set(target.radius * 0.85, 0, target.radius * 0.85);
+        target.group.add(flag); 
+        target.completed = true; 
       }
 
-      const flag = createFlag(success ? 0x00e676 : 0xd32f2f);
-      flag.position.set(target.radius * 0.85, 0, target.radius * 0.85);
-      target.group.add(flag); target.completed = true; 
-
       broadcastQuestFlag(questTargetIndex, success);
+      interactInRange = false;
       
       if (success) {
         correctAnswersCount++; 
         document.getElementById('hud-score').innerText = String(correctAnswersCount);
-        document.getElementById('inst-text').innerText = "Correct! Green Flag Raised!"; interactInRange = false;
+        document.getElementById('inst-text').innerText = "Correct! Green Flag Raised!";
+
         if (correctAnswersCount > 0 && correctAnswersCount % 10 === 0) {
-          triggerFireworks(); gameState = 'milestone';
+          triggerFireworks(); 
+          gameState = 'milestone';
           setTimeout(() => { document.getElementById('milestone-modal').style.display = 'flex'; }, 1500);
-        } else { startQuestCooldown(); }
+        } else { 
+          startQuestCooldown(); 
+        }
       } else {
-        document.getElementById('inst-text').innerText = "Incorrect! Red Flag Raised."; interactInRange = false; startQuestCooldown();
+        document.getElementById('inst-text').innerText = "Incorrect! Red Flag Raised.";
+        startQuestCooldown();
       }
     }
 
@@ -986,7 +1035,7 @@
       joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`; joyX = dx / maxDist; joyY = dy / maxDist;
     }
 
-    // --- COMPASS ---
+    // --- ACCURATE DIRECTION COMPASS ---
     const compCanvas = document.getElementById('compassCanvas'); const compCtx = compCanvas.getContext('2d');
     function resizeCanvas() {
       compCanvas.width = window.innerWidth; compCanvas.height = 46;
@@ -999,12 +1048,11 @@
       compCtx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; compCtx.lineWidth = 1;
       compCtx.beginPath(); compCtx.moveTo(0, 24); compCtx.lineTo(W, 24); compCtx.stroke();
       
-      const halfFovDeg = 80; const pxPerDeg = (W * 0.44) / halfFovDeg; 
-      const tickSpacingDeg = 10; const centerX = W / 2;
+      const pxPerDeg = (W * 0.44) / 80; const tickSpacingDeg = 10; const centerX = W / 2;
       
       let centerDeg = cumulativeYawDeg;
-      let startDeg = Math.floor((centerDeg - halfFovDeg - 10) / tickSpacingDeg) * tickSpacingDeg;
-      let endDeg = Math.ceil((centerDeg + halfFovDeg + 10) / tickSpacingDeg) * tickSpacingDeg;
+      let startDeg = Math.floor((centerDeg - 90) / tickSpacingDeg) * tickSpacingDeg;
+      let endDeg = Math.ceil((centerDeg + 90) / tickSpacingDeg) * tickSpacingDeg;
 
       for (let deg = startDeg; deg <= endDeg; deg += tickSpacingDeg) {
         let offsetDeg = deg - centerDeg;
@@ -1070,7 +1118,6 @@
         rp.parts.root.position.lerp(rp.targetPos, 0.2);
         rp.parts.root.quaternion.slerp(rp.targetQuat, 0.2);
         
-        // Remote walking gait
         rp.parts.lArm.rotation.x = Math.sin(rp.walkCycle) * 0.75;
         rp.parts.rArm.rotation.x = -Math.sin(rp.walkCycle) * 0.75;
         rp.parts.lLeg.rotation.x = -Math.sin(rp.walkCycle) * 0.65;
@@ -1078,7 +1125,7 @@
         rp.parts.torso.position.y = 1.05 + Math.abs(Math.sin(rp.walkCycle * 2)) * 0.08;
       }
 
-      // Input Movement
+      // Input Movement (Allowed in playing, cooldown, and explore states)
       let mX = 0, mZ = 0;
       if (gameState === 'playing' || gameState === 'cooldown' || gameState === 'explore') {
         if (keys.w || keys.ArrowUp) mZ -= 1; if (keys.s || keys.ArrowDown) mZ += 1;
