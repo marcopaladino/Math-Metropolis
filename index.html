@@ -48,11 +48,16 @@
       position: absolute; top: 56px; right: 16px; background: rgba(15, 23, 42, 0.78);
       backdrop-filter: blur(6px); border: 1px solid rgba(255, 255, 255, 0.25);
       border-radius: 12px; padding: 8px 16px; display: flex; align-items: center; gap: 14px;
-      color: #fff; box-shadow: 0 4px 14px rgba(0,0,0,0.3); pointer-events: none;
+      color: #fff; box-shadow: 0 4px 14px rgba(0,0,0,0.3); pointer-events: auto;
     }
-    .hud-stat { display: flex; flex-direction: column; align-items: center; }
+    .hud-stat { display: flex; flex-direction: column; align-items: center; cursor: pointer; }
     .hud-val { font-size: 18px; font-weight: 800; color: #00e676; }
     .hud-lbl { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; opacity: 0.8; }
+    #mp-btn {
+      background: #0288d1; border: 1.5px solid #4fc3f7; color: #fff; padding: 6px 10px; border-radius: 6px;
+      font-size: 11px; font-weight: 800; cursor: pointer; text-transform: uppercase;
+    }
+    #mp-btn:hover { background: #0277bd; }
 
     #instructions-box {
       position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
@@ -107,10 +112,10 @@
       letter-spacing: 2px; text-transform: uppercase; box-sizing: border-box;
     }
     .btn-row { display: flex; gap: 10px; }
-    #quest-modal, #milestone-modal { display: none; }
+    #quest-modal, #milestone-modal, #mp-modal { display: none; }
   </style>
 </head>
-<body>
+<body tabindex="0">
 
   <div id="ui-layer">
     <div id="compass-container"><canvas id="compassCanvas"></canvas><div id="compass-pointer"></div></div>
@@ -124,6 +129,7 @@
       <div class="hud-stat"><span class="hud-val" id="hud-room">SOLO</span><span class="hud-lbl">Room</span></div>
       <div class="hud-stat"><span class="hud-val" id="hud-players">1</span><span class="hud-lbl">Players</span></div>
       <div class="hud-stat"><span class="hud-val" id="hud-score">0</span><span class="hud-lbl">Stars</span></div>
+      <button id="mp-btn" onclick="openMultiplayerModal()">Multiplayer</button>
     </div>
     
     <div id="instructions-box"><span id="inst-text">Welcome to Math Metropolis!</span></div>
@@ -133,45 +139,49 @@
   <div id="jump-btn" class="action-btn">JUMP</div>
   <div id="interact-btn" class="action-btn">QUEST</div>
 
-  <!-- Setup & Multiplayer Lobby Modal -->
+  <!-- Direct Start Grade Selection Modal -->
   <div id="start-modal" class="modal-overlay">
-    <div class="modal-box" id="step-grade">
+    <div class="modal-box">
       <h2>Math Metropolis</h2>
-      <p>Select your Grade Level (Ontario Curriculum):</p>
+      <p>Select your Grade Level (Ontario Curriculum) to start playing:</p>
       <div class="grade-grid">
-        <button class="grade-btn" onclick="selectGrade(1)">Grade 1</button>
-        <button class="grade-btn" onclick="selectGrade(2)">Grade 2</button>
-        <button class="grade-btn" onclick="selectGrade(3)">Grade 3</button>
-        <button class="grade-btn" onclick="selectGrade(4)">Grade 4</button>
-        <button class="grade-btn" onclick="selectGrade(5)">Grade 5</button>
-        <button class="grade-btn" onclick="selectGrade(6)">Grade 6</button>
-        <button class="grade-btn" onclick="selectGrade(7)">Grade 7</button>
-        <button class="grade-btn" onclick="selectGrade(8)">Grade 8</button>
+        <button class="grade-btn" onclick="startGame(1)">Grade 1</button>
+        <button class="grade-btn" onclick="startGame(2)">Grade 2</button>
+        <button class="grade-btn" onclick="startGame(3)">Grade 3</button>
+        <button class="grade-btn" onclick="startGame(4)">Grade 4</button>
+        <button class="grade-btn" onclick="startGame(5)">Grade 5</button>
+        <button class="grade-btn" onclick="startGame(6)">Grade 6</button>
+        <button class="grade-btn" onclick="startGame(7)">Grade 7</button>
+        <button class="grade-btn" onclick="startGame(8)">Grade 8</button>
       </div>
+      <p style="font-size:12px; opacity:0.8; margin-top:8px;">You can join or host multiplayer sessions anytime from the top-right button.</p>
+    </div>
+  </div>
+
+  <!-- Multiplayer Host / Join Modal -->
+  <div id="mp-modal" class="modal-overlay">
+    <div class="modal-box" id="mp-choose-view">
+      <h2>Multiplayer Mode</h2>
+      <p>Connect with other students in your classroom:</p>
+      <button class="menu-btn" style="background:#f57c00; border-color:#ffb74d;" onclick="showHostUI()">Host New Classroom</button>
+      <button class="menu-btn" style="background:#0288d1; border-color:#4fc3f7;" onclick="showJoinUI()">Join with Code</button>
+      <button class="menu-btn" style="background:#455a64; border-color:#90a4ae;" onclick="closeMultiplayerModal()">Close</button>
     </div>
 
-    <div class="modal-box" id="step-mode" style="display:none;">
-      <h2>Session Mode</h2>
-      <p>Play alone or start a multiplayer classroom session:</p>
-      <button class="menu-btn" style="background:#2e7d32; border-color:#81c784;" onclick="startSolo()">Play Solo</button>
-      <button class="menu-btn" style="background:#f57c00; border-color:#ffb74d;" onclick="showHostUI()">Host Multiplayer Session</button>
-      <button class="menu-btn" style="background:#0288d1; border-color:#4fc3f7;" onclick="showJoinUI()">Join with Room Code</button>
-    </div>
-
-    <div class="modal-box" id="step-host" style="display:none;">
+    <div class="modal-box" id="mp-host-view" style="display:none;">
       <h2>Host Classroom</h2>
       <p>Share this 4-letter Room Code with other students:</p>
       <div id="host-code-display" style="font-size:32px; font-weight:800; letter-spacing:4px; color:#ffea00; margin:16px 0;">GENERATING...</div>
-      <p id="host-status" style="font-size:13px; opacity:0.8;">Waiting for connections...</p>
-      <button class="menu-btn" style="background:#2e7d32; border-color:#81c784;" onclick="launchMultiplayerGame()">Enter World</button>
+      <p id="host-status" style="font-size:13px; opacity:0.8;">Waiting for players...</p>
+      <button class="menu-btn" style="background:#2e7d32; border-color:#81c784;" onclick="closeMultiplayerModal()">Back to Game</button>
     </div>
 
-    <div class="modal-box" id="step-join" style="display:none;">
+    <div class="modal-box" id="mp-join-view" style="display:none;">
       <h2>Join Session</h2>
-      <p>Enter the Room Code given by your teacher or friend:</p>
+      <p>Enter the 4-letter Room Code:</p>
       <input type="text" id="join-code-input" class="room-input" placeholder="CODE" maxlength="5">
       <div class="btn-row">
-        <button class="menu-btn" style="background:#455a64; border-color:#90a4ae;" onclick="backToMode()">Back</button>
+        <button class="menu-btn" style="background:#455a64; border-color:#90a4ae;" onclick="backToMpChoose()">Back</button>
         <button class="menu-btn" style="background:#0288d1; border-color:#4fc3f7;" onclick="joinRoom()">Join Game</button>
       </div>
       <p id="join-status" style="font-size:13px; color:#ff8a80; margin-top:8px;"></p>
@@ -224,8 +234,14 @@
     let interactInRange = false; let availableQuests = []; 
 
     // --- PEERJS MULTIPLAYER STATE ---
-    let isMultiplayer = false; let isHost = false; let myPeer = null; let hostConnection = null;
-    const clientConnections = {}; const remotePlayers = {}; let currentRoomCode = "SOLO";
+    let isMultiplayer = false;
+    let isHost = false;
+    let myPeer = null;
+    let hostConnection = null;
+    const clientConnections = {};
+    const remotePlayers = {};
+    let currentRoomCode = "SOLO";
+
     const suitColorPalette = [0x1976d2, 0xd32f2f, 0x388e3c, 0x7b1fa2, 0xf57c00, 0x0097a7, 0x5d4037, 0xc2185b];
 
     // --- PROCEDURAL CURRICULUM GENERATOR ---
@@ -279,6 +295,8 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap; 
     document.body.appendChild(renderer.domElement);
+    renderer.domElement.tabIndex = 1;
+    renderer.domElement.style.outline = 'none';
 
     const hemiLight = new THREE.HemisphereLight(0xffffff, 0x37474f, 0.6); scene.add(hemiLight);
     const dirLight = new THREE.DirectionalLight(0xfff8e7, 1.4);
@@ -300,14 +318,12 @@
       return matCache[hex];
     }
     
-    // Core Nature Materials (Dynamic Seasonal Adjustments)
     const woodMat = getMat(0x4e342e);
     const rockMat = getMat(0x78909c);
     const decFoliageMat = new THREE.MeshStandardMaterial({ color: 0x1e8234, roughness: 0.8, flatShading: true });
     const pineFoliageMat = new THREE.MeshStandardMaterial({ color: 0x1b5e20, roughness: 0.8, flatShading: true });
     const bushFoliageMat = new THREE.MeshStandardMaterial({ color: 0x33691e, roughness: 0.8, flatShading: true });
 
-    // Shared Geometry Instancing (Saves ~90% RAM)
     const trunkGeo = new THREE.CylinderGeometry(0.35, 0.5, 2.6, 6);
     const rootGeo = new THREE.CylinderGeometry(0.55, 0.65, 0.8, 6);
     const decCrownGeo = new THREE.DodecahedronGeometry(1.8, 0);
@@ -318,9 +334,7 @@
     const bushGeo = new THREE.DodecahedronGeometry(1.0, 0);
     const rockGeo = new THREE.IcosahedronGeometry(1.0, 0);
 
-    // --- ENVIRONMENT GENERATION ---
-    const colliders = []; const buildings = []; 
-    const streetLampBulbs = [];
+    const colliders = []; const buildings = []; const streetLampBulbs = [];
 
     function anchorToPlanetSurface(group, surfacePos, randomRotY = true) {
       group.position.copy(surfacePos);
@@ -329,7 +343,7 @@
       if (randomRotY) group.rotateY(Math.random() * Math.PI * 2);
     }
 
-    // 160 Cities / Buildings
+    // 160 Buildings
     const wallColors = [0x546e7a, 0x78909c, 0x8d6e63, 0xa1887f, 0x6d4c41, 0xc2185b, 0xd32f2f, 0x1976d2, 0x0288d1, 0x00796b, 0x388e3c, 0xf57c00, 0x455a64, 0xb0bec5];
     function createUniqueBuilding(surfacePos) {
       const bGroup = new THREE.Group();
@@ -361,7 +375,7 @@
     }
     for (let i = 0; i < buildings.length; i++) { availableQuests.push(i); }
 
-    // 8 Plaza Trees & Fountain
+    // Plaza Trees & Fountain
     for (let t = 0; t < 8; t++) {
       const angle = (t / 8) * Math.PI * 2;
       const tPos = new THREE.Vector3(Math.cos(angle) * 16, Math.sin(angle) * 16, 0);
@@ -381,7 +395,7 @@
     anchorToPlanetSurface(fountainGroup, plazaCenter, false); scene.add(fountainGroup);
     colliders.push({ pos: plazaCenter.clone(), radius: 4.5 });
 
-    // 200 Urban Props
+    // Urban Props
     function createUrbanDecor(surfacePos, typeIndex) {
       const dGroup = new THREE.Group(); let colRadius = 1.0;
       switch(typeIndex % 4) {
@@ -413,7 +427,7 @@
       if (dPos.distanceTo(plazaCenter) > 22) createUrbanDecor(dPos, i);
     }
 
-    // 700 Nature Elements (Dense Forests & Rocks)
+    // Dense Nature
     function createNature(surfacePos, typeRand) {
       const nGroup = new THREE.Group(); let colRadius = 1.0;
       if (typeRand < 0.4) {
@@ -475,7 +489,7 @@
       fireworksSystem.visible = true; fireworksActive = true; fwTimer = 0;
     }
 
-    // --- REDESIGNED 3D LOW-POLY CHARACTER GEOMETRY ---
+    // --- REDESIGNED 3D CHARACTER GEOMETRY ---
     function buildCharacterMesh(suitColorHex) {
       const charGroup = new THREE.Group();
       const suitMat = getMat(suitColorHex); const skinMat = getMat(0xfac096);
@@ -483,7 +497,7 @@
       const darkMat = getMat(0x1a237e); const bootMat = getMat(0x543d2b);
       const eyeMat = getMat(0x212121); const tieMat = getMat(0x0288d1);
 
-      // TORSO & SUIT
+      // Torso & Suit
       const torso = new THREE.Group(); torso.position.y = 0.85; charGroup.add(torso);
       const shirt = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.78, 0.44), whiteMat); shirt.position.set(0, 0.38, 0.04); shirt.castShadow = true; torso.add(shirt);
       for (let b = 0; b < 3; b++) { const btn = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.04), eyeMat); btn.position.set(0, 0.22 + b * 0.16, 0.27); torso.add(btn); }
@@ -495,7 +509,7 @@
       const bowLeft = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.10, 0.05), tieMat); bowLeft.position.set(-0.11, 0.68, 0.26); bowLeft.rotation.z = -0.12; torso.add(bowLeft);
       const bowRight = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.10, 0.05), tieMat); bowRight.position.set(0.11, 0.68, 0.26); bowRight.rotation.z = 0.12; torso.add(bowRight);
 
-      // ARMS
+      // Arms
       const lArm = new THREE.Group(); lArm.position.set(-0.46, 0.68, 0); torso.add(lArm);
       const lShoulder = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.15, 0.42, 6), suitMat); lShoulder.position.y = -0.18; lShoulder.castShadow = true; lArm.add(lShoulder);
       const lForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.13, 0.38, 6), suitMat); lForearm.position.set(0, -0.46, 0.03); lForearm.rotation.x = -0.15; lForearm.castShadow = true; lArm.add(lForearm);
@@ -508,7 +522,7 @@
       const rCuff = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.08, 6), whiteMat); rCuff.position.set(0, -0.66, 0.06); rArm.add(rCuff);
       const rHand = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.18, 0.16), skinMat); rHand.position.set(0, -0.76, 0.07); rHand.castShadow = true; rArm.add(rHand);
 
-      // HEAD
+      // Head
       const head = new THREE.Group(); head.position.set(0, 0.82, 0.02); torso.add(head);
       const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.17, 0.16, 6), skinMat); neck.position.y = -0.04; head.add(neck);
       const headMesh = new THREE.Mesh(new THREE.DodecahedronGeometry(0.44, 0), skinMat); headMesh.scale.set(0.98, 1.05, 0.95); headMesh.position.set(0, 0.32, 0); headMesh.castShadow = true; head.add(headMesh);
@@ -536,7 +550,7 @@
       const mAngleL = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.09, 0.02), suitMat); mAngleL.position.set(-0.025, 0.67, 0.505); mAngleL.rotation.z = -0.55; head.add(mAngleL);
       const mAngleR = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.09, 0.02), suitMat); mAngleR.position.set(0.025, 0.67, 0.505); mAngleR.rotation.z = 0.55; head.add(mAngleR);
 
-      // PANTS & BOOTS
+      // Pants & Boots
       const lLeg = new THREE.Group(); lLeg.position.set(-0.24, 0.75, 0); charGroup.add(lLeg);
       const lPant = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.14, 0.48, 6), suitMat); lPant.position.y = -0.16; lPant.castShadow = true; lLeg.add(lPant);
       const lBootCuff = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.17, 0.32, 6), bootMat); lBootCuff.position.y = -0.42; lBootCuff.castShadow = true; lLeg.add(lBootCuff);
@@ -573,38 +587,78 @@
     beaconLight = new THREE.PointLight(0xffea00, 2.5, 30); beaconGroup.add(beaconLight);
     questHighlightMaterial = new THREE.LineBasicMaterial({ color: 0xffea00, linewidth: 3, transparent: true, opacity: 1.0 });
 
-    // --- LOBBY & MULTIPLAYER FLOW ---
-    function selectGrade(g) { playerGrade = g; document.getElementById('step-grade').style.display = 'none'; document.getElementById('step-mode').style.display = 'block'; }
-    function backToMode() { document.getElementById('step-join').style.display = 'none'; document.getElementById('step-host').style.display = 'none'; document.getElementById('step-mode').style.display = 'block'; }
-    
-    function startSolo() {
-      document.getElementById('start-modal').style.display = 'none'; document.getElementById('hud-room').innerText = "SOLO"; document.getElementById('hud-players').innerText = "1";
-      document.getElementById('inst-text').innerText = `Math Curriculum Active (Grade ${playerGrade})`;
-      gameState = 'playing'; clock.start(); setTimeout(assignNewQuest, 1500);
+    // --- GAME FLOW LOGIC ---
+    function startGame(grade) {
+      playerGrade = grade;
+      document.getElementById('start-modal').style.display = 'none';
+      document.getElementById('hud-room').innerText = "SOLO";
+      document.getElementById('hud-players').innerText = "1";
+      document.getElementById('inst-text').innerText = `Math Curriculum Active (Grade ${grade}) • W A S D to Move`;
+      
+      gameState = 'playing'; 
+      clock.start();
+      
+      // Regain window keyboard focus inside iframe
+      window.focus();
+      document.body.focus();
+      renderer.domElement.focus();
+      
+      setTimeout(assignNewQuest, 1500);
     }
 
-    function generateRoomCode() { const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let code = ""; for (let i = 0; i < 4; i++) code += chars.charAt(Math.floor(Math.random() * chars.length)); return code; }
+    // --- MULTIPLAYER MODAL & PEERJS SETUP ---
+    function openMultiplayerModal() {
+      document.getElementById('mp-modal').style.display = 'flex';
+      document.getElementById('mp-choose-view').style.display = 'block';
+      document.getElementById('mp-host-view').style.display = 'none';
+      document.getElementById('mp-join-view').style.display = 'none';
+    }
+
+    function closeMultiplayerModal() {
+      document.getElementById('mp-modal').style.display = 'none';
+      window.focus();
+      renderer.domElement.focus();
+    }
+
+    function backToMpChoose() {
+      document.getElementById('mp-join-view').style.display = 'none';
+      document.getElementById('mp-host-view').style.display = 'none';
+      document.getElementById('mp-choose-view').style.display = 'block';
+    }
+
+    function generateRoomCode() { 
+      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let code = ""; 
+      for (let i = 0; i < 4; i++) code += chars.charAt(Math.floor(Math.random() * chars.length)); 
+      return code; 
+    }
 
     function showHostUI() {
-      document.getElementById('step-mode').style.display = 'none'; document.getElementById('step-host').style.display = 'block';
+      document.getElementById('mp-choose-view').style.display = 'none';
+      document.getElementById('mp-host-view').style.display = 'block';
+      
       currentRoomCode = generateRoomCode();
       const hostPeerId = "math-metropolis-" + currentRoomCode;
       document.getElementById('host-code-display').innerText = currentRoomCode;
 
-      myPeer = new Peer(hostPeerId); isHost = true; isMultiplayer = true;
-      myPeer.on('open', () => { document.getElementById('host-status').innerText = "Room created! Waiting for students to connect..."; });
+      if (myPeer) myPeer.destroy();
+      myPeer = new Peer(hostPeerId); 
+      isHost = true; 
+      isMultiplayer = true;
+      
+      document.getElementById('hud-room').innerText = currentRoomCode;
+
+      myPeer.on('open', () => { document.getElementById('host-status').innerText = "Room created! Waiting for students..."; });
       myPeer.on('connection', (conn) => { handleIncomingConnection(conn); });
       myPeer.on('error', (err) => { if (err.type === 'unavailable-id') showHostUI(); });
+      
+      startNetworkBroadcastLoop();
     }
 
-    function launchMultiplayerGame() {
-      document.getElementById('start-modal').style.display = 'none'; document.getElementById('hud-room').innerText = currentRoomCode;
-      document.getElementById('hud-players').innerText = String(Object.keys(clientConnections).length + 1);
-      document.getElementById('inst-text').innerText = `Classroom Room ${currentRoomCode} Active!`;
-      gameState = 'playing'; clock.start(); setTimeout(assignNewQuest, 1500); startNetworkBroadcastLoop();
+    function showJoinUI() { 
+      document.getElementById('mp-choose-view').style.display = 'none'; 
+      document.getElementById('mp-join-view').style.display = 'block'; 
+      document.getElementById('join-status').innerText = ""; 
     }
-
-    function showJoinUI() { document.getElementById('step-mode').style.display = 'none'; document.getElementById('step-join').style.display = 'block'; document.getElementById('join-status').innerText = ""; }
 
     function joinRoom() {
       const rawCode = document.getElementById('join-code-input').value.trim().toUpperCase();
@@ -612,13 +666,18 @@
       document.getElementById('join-status').innerText = "Connecting to session...";
       currentRoomCode = rawCode; const targetHostId = "math-metropolis-" + rawCode;
 
+      if (myPeer) myPeer.destroy();
       myPeer = new Peer(); isHost = false; isMultiplayer = true;
+      
       myPeer.on('open', () => {
         hostConnection = myPeer.connect(targetHostId);
         hostConnection.on('open', () => {
-          document.getElementById('start-modal').style.display = 'none'; document.getElementById('hud-room').innerText = currentRoomCode;
+          document.getElementById('mp-modal').style.display = 'none'; 
+          document.getElementById('hud-room').innerText = currentRoomCode;
           document.getElementById('inst-text').innerText = `Connected to Room ${currentRoomCode}!`;
-          gameState = 'playing'; clock.start(); startNetworkBroadcastLoop();
+          window.focus();
+          renderer.domElement.focus();
+          startNetworkBroadcastLoop();
         });
         hostConnection.on('data', (data) => { handleNetworkMessage(data); });
         hostConnection.on('close', () => { document.getElementById('inst-text').innerText = "Host closed session."; });
@@ -626,9 +685,9 @@
       myPeer.on('error', () => { document.getElementById('join-status').innerText = "Could not find room. Check code & try again."; });
     }
 
-    // --- NETWORK MESSAGE HANDLING ---
     function handleIncomingConnection(conn) {
-      clientConnections[conn.peer] = conn; updatePlayerCountHUD();
+      clientConnections[conn.peer] = conn; 
+      updatePlayerCountHUD();
       conn.on('open', () => { conn.send({ type: 'init_sync', grade: playerGrade, score: correctAnswersCount, questIndex: questTargetIndex }); });
       conn.on('data', (data) => {
         handleNetworkMessage(data, conn.peer);
@@ -708,8 +767,10 @@
       }
     }
 
+    let networkBroadcastTimer = null;
     function startNetworkBroadcastLoop() {
-      setInterval(() => {
+      if (networkBroadcastTimer) clearInterval(networkBroadcastTimer);
+      networkBroadcastTimer = setInterval(() => {
         if (!isMultiplayer || !myPeer) return;
         const msg = { type: 'player_transform', peerId: myPeer.id, x: player.position.x, y: player.position.y, z: player.position.z, qx: player.quaternion.x, qy: player.quaternion.y, qz: player.quaternion.z, qw: player.quaternion.w, walkCycle: walkCycle };
         if (isHost) { for (let id in clientConnections) { if (clientConnections[id].open) clientConnections[id].send(msg); } } 
@@ -730,7 +791,6 @@
       else if (hostConnection && hostConnection.open) { hostConnection.send(msg); }
     }
 
-    // --- GAME FLOW LOGIC ---
     function continueGame() { document.getElementById('milestone-modal').style.display = 'none'; startQuestCooldown(); }
     function stopGame() {
       document.getElementById('milestone-modal').style.display = 'none'; gameState = 'explore'; document.getElementById('inst-text').innerText = "Explore Mode (No Quests)";
@@ -793,21 +853,58 @@
           triggerFireworks(); gameState = 'milestone'; setTimeout(() => { document.getElementById('milestone-modal').style.display = 'flex'; }, 1500);
         } else { startQuestCooldown(); }
       } else { document.getElementById('inst-text').innerText = "Incorrect! Red Flag Raised."; startQuestCooldown(); }
+      
+      window.focus();
+      renderer.domElement.focus();
     }
 
-    // --- CONTROLS ---
-    window.addEventListener('keydown', (e) => {
-      if (keys.hasOwnProperty(e.key)) keys[e.key] = true;
-      if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); if (isGrounded && gameState !== 'prompt' && gameState !== 'start') { radialVelocity = jumpStrength; isGrounded = false; } }
-      if (e.key === 'r' || e.key === 'R') triggerQuestPrompt();
-    });
-    window.addEventListener('keyup', (e) => { if (keys.hasOwnProperty(e.key)) keys[e.key] = false; });
+    // --- BULLETPROOF KEYBOARD INPUT HANDLING ---
+    const handleKeyDown = (e) => {
+      const k = e.key ? e.key.toLowerCase() : '';
+      const c = e.code || '';
 
+      if (k === 'w' || c === 'KeyW' || k === 'arrowup' || c === 'ArrowUp') keys.w = true;
+      if (k === 's' || c === 'KeyS' || k === 'arrowdown' || c === 'ArrowDown') keys.s = true;
+      if (k === 'a' || c === 'KeyA' || k === 'arrowleft' || c === 'ArrowLeft') keys.a = true;
+      if (k === 'd' || c === 'KeyD' || k === 'arrowright' || c === 'ArrowRight') keys.d = true;
+
+      if (k === ' ' || c === 'Space') { 
+        e.preventDefault(); 
+        if (isGrounded && gameState !== 'prompt' && gameState !== 'start') { 
+          radialVelocity = jumpStrength; 
+          isGrounded = false; 
+        } 
+      }
+      if (k === 'r' || c === 'KeyR') triggerQuestPrompt();
+    };
+
+    const handleKeyUp = (e) => {
+      const k = e.key ? e.key.toLowerCase() : '';
+      const c = e.code || '';
+
+      if (k === 'w' || c === 'KeyW' || k === 'arrowup' || c === 'ArrowUp') keys.w = false;
+      if (k === 's' || c === 'KeyS' || k === 'arrowdown' || c === 'ArrowDown') keys.s = false;
+      if (k === 'a' || c === 'KeyA' || k === 'arrowleft' || c === 'ArrowLeft') keys.a = false;
+      if (k === 'd' || c === 'KeyD' || k === 'arrowright' || c === 'ArrowRight') keys.d = false;
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keyup', handleKeyUp);
+
+    // Auto-focus window on canvas clicks or taps
+    window.addEventListener('click', () => { window.focus(); renderer.domElement.focus(); });
+    window.addEventListener('pointerdown', () => { window.focus(); renderer.domElement.focus(); });
+
+    // Mobile Virtual Joystick
     const joystickZone = document.getElementById('joystick-zone'); const joystickKnob = document.getElementById('joystick-knob');
     const jumpBtn = document.getElementById('jump-btn'); const interactBtn = document.getElementById('interact-btn');
     let center = { x: 0, y: 0 }; const maxDist = 40;
 
-    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) { joystickZone.style.display = 'block'; jumpBtn.style.display = 'flex'; }
+    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) { 
+      joystickZone.style.display = 'block'; jumpBtn.style.display = 'flex'; 
+    }
 
     joystickZone.addEventListener('touchstart', (e) => {
       isDragging = true; center = { x: joystickZone.getBoundingClientRect().left + 55, y: joystickZone.getBoundingClientRect().top + 55 };
@@ -877,6 +974,8 @@
     }
 
     // --- MAIN ENGINE ANIMATION LOOP ---
+    let walkCycle = 0; let prevCamForward = initForward.clone(); let cumulativeCameraYawDeg = 0;
+
     function animate() {
       requestAnimationFrame(animate);
       if (gameState === 'start') { renderer.render(scene, camera); return; }
@@ -904,10 +1003,13 @@
         rp.parts.torso.position.y = 0.85 + Math.abs(Math.sin(rp.walkCycle * 2)) * 0.08;
       }
 
+      // Input Movement
       let mX = 0, mZ = 0;
       if (gameState === 'playing' || gameState === 'cooldown' || gameState === 'explore') {
-        if (keys.w || keys.ArrowUp) mZ -= 1; if (keys.s || keys.ArrowDown) mZ += 1;
-        if (keys.a || keys.ArrowLeft) mX -= 1; if (keys.d || keys.ArrowRight) mX += 1;
+        if (keys.w || keys.ArrowUp) mZ -= 1; 
+        if (keys.s || keys.ArrowDown) mZ += 1;
+        if (keys.a || keys.ArrowLeft) mX -= 1; 
+        if (keys.d || keys.ArrowRight) mX += 1;
         if (joyX !== 0 || joyY !== 0) { mX = joyX; mZ = joyY; }
       }
 
@@ -924,9 +1026,13 @@
         let tPos = pGround.clone().add(dMove).normalize().multiplyScalar(planetRadius);
         
         let col = false;
-        for (let i = 0; i < colliders.length; i++) { if (tPos.distanceTo(colliders[i].pos) < colliders[i].radius + 0.9) { col = true; break; } }
+        for (let i = 0; i < colliders.length; i++) { 
+          if (tPos.distanceTo(colliders[i].pos) < colliders[i].radius + 0.9) { col = true; break; } 
+        }
         
-        if (!col) { pGround.copy(tPos); } else {
+        if (!col) { 
+          pGround.copy(tPos); 
+        } else {
           let sX = pGround.clone().add(cRight.clone().multiplyScalar(mX * moveSpeed)).normalize().multiplyScalar(planetRadius);
           let sZ = pGround.clone().add(cFwd.clone().multiplyScalar(-mZ * moveSpeed)).normalize().multiplyScalar(planetRadius);
           let cx = false, cz = false;
@@ -997,6 +1103,7 @@
       }
       updateDirectionCompass(questRelAngleDeg, questDistMeters, cumulativeCameraYawDeg);
 
+      // Time & Seasons
       const el = clock.getElapsedTime(); const yrFrac = (el % YEAR_DURATION) / YEAR_DURATION;
       const sIdx = Math.floor(yrFrac * 4); const nIdx = (sIdx + 1) % 4; const sBlend = (yrFrac * 4) % 1;
       
