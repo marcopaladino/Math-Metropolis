@@ -43,7 +43,7 @@
     #season-name { font-size: 13px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: #ffea00; }
     #time-clock { font-size: 11px; font-weight: 600; color: rgba(255, 255, 255, 0.85); letter-spacing: 0.5px; }
 
-    /* Multiplayer & Score HUD */
+    /* Multiplayer, Score & Grade HUD */
     #multiplayer-hud {
       position: absolute; top: 56px; right: 16px; background: rgba(15, 23, 42, 0.78);
       backdrop-filter: blur(6px); border: 1px solid rgba(255, 255, 255, 0.25);
@@ -53,9 +53,16 @@
     .hud-stat { display: flex; flex-direction: column; align-items: center; }
     .hud-val { font-size: 18px; font-weight: 800; color: #00e676; }
     .hud-lbl { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; opacity: 0.8; }
+    
+    .hud-buttons { display: flex; flex-direction: column; gap: 6px; margin-left: 8px; }
+    #grade-btn-hud {
+      background: #7b1fa2; border: 1.5px solid #ce93d8; color: #fff; padding: 6px 12px; border-radius: 6px;
+      font-size: 11px; font-weight: 800; cursor: pointer; text-transform: uppercase; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    #grade-btn-hud:hover { background: #6a1b9a; }
     #mp-btn {
       background: #0288d1; border: 1.5px solid #4fc3f7; color: #fff; padding: 6px 12px; border-radius: 6px;
-      font-size: 11px; font-weight: 800; cursor: pointer; text-transform: uppercase;
+      font-size: 11px; font-weight: 800; cursor: pointer; text-transform: uppercase; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
     #mp-btn:hover { background: #0277bd; }
 
@@ -129,7 +136,10 @@
       <div class="hud-stat"><span class="hud-val" id="hud-room">SOLO</span><span class="hud-lbl">Room</span></div>
       <div class="hud-stat"><span class="hud-val" id="hud-players">1</span><span class="hud-lbl">Players</span></div>
       <div class="hud-stat"><span class="hud-val" id="hud-score">0</span><span class="hud-lbl">Stars</span></div>
-      <button id="mp-btn" onclick="openMultiplayerModal()">Multiplayer</button>
+      <div class="hud-buttons">
+        <button id="grade-btn-hud" onclick="openGradeModal()">Grade 1</button>
+        <button id="mp-btn" onclick="openMultiplayerModal()">Multiplayer</button>
+      </div>
     </div>
     
     <div id="instructions-box"><span id="inst-text">Welcome to Math Metropolis!</span></div>
@@ -139,22 +149,23 @@
   <div id="jump-btn" class="action-btn">JUMP</div>
   <div id="interact-btn" class="action-btn">QUEST</div>
 
-  <!-- Start Grade Selection Modal -->
+  <!-- Start & Change Grade Modal -->
   <div id="start-modal" class="modal-overlay">
     <div class="modal-box">
       <h2>Math Metropolis</h2>
-      <p>Select your Grade Level (Ontario Curriculum) to start playing:</p>
+      <p>Select your Grade Level (Ontario Curriculum):</p>
       <div class="grade-grid">
-        <button class="grade-btn" onclick="startGame(1)">Grade 1</button>
-        <button class="grade-btn" onclick="startGame(2)">Grade 2</button>
-        <button class="grade-btn" onclick="startGame(3)">Grade 3</button>
-        <button class="grade-btn" onclick="startGame(4)">Grade 4</button>
-        <button class="grade-btn" onclick="startGame(5)">Grade 5</button>
-        <button class="grade-btn" onclick="startGame(6)">Grade 6</button>
-        <button class="grade-btn" onclick="startGame(7)">Grade 7</button>
-        <button class="grade-btn" onclick="startGame(8)">Grade 8</button>
+        <button class="grade-btn" onclick="selectGrade(1)">Grade 1</button>
+        <button class="grade-btn" onclick="selectGrade(2)">Grade 2</button>
+        <button class="grade-btn" onclick="selectGrade(3)">Grade 3</button>
+        <button class="grade-btn" onclick="selectGrade(4)">Grade 4</button>
+        <button class="grade-btn" onclick="selectGrade(5)">Grade 5</button>
+        <button class="grade-btn" onclick="selectGrade(6)">Grade 6</button>
+        <button class="grade-btn" onclick="selectGrade(7)">Grade 7</button>
+        <button class="grade-btn" onclick="selectGrade(8)">Grade 8</button>
       </div>
-      <p style="font-size:12px; opacity:0.8; margin-top:8px;">You can join or host multiplayer sessions anytime from the top-right button.</p>
+      <button id="cancel-grade-btn" class="menu-btn" style="background:#455a64; border-color:#90a4ae; display:none; margin-top:10px;" onclick="closeGradeModal()">Cancel</button>
+      <p id="grade-hint" style="font-size:12px; opacity:0.8; margin-top:8px;">You can join or host multiplayer sessions anytime from the top-right button.</p>
     </div>
   </div>
 
@@ -233,7 +244,7 @@
     let questHighlightGroup = null; let questHighlightMaterial = null;
     let interactInRange = false; let availableQuests = []; 
 
-    // --- PEERJS MULTIPLAYER ARCHITECTURE ---
+    // --- PEERJS MULTIPLAYER STATE ---
     let isMultiplayer = false;
     let isHost = false;
     let myPeer = null;
@@ -243,7 +254,6 @@
     let currentRoomCode = "SOLO";
     let networkBroadcastTimer = null;
 
-    // Redundant STUN configuration for reliable cross-network connections
     const peerConfig = {
       config: {
         iceServers: [
@@ -577,7 +587,6 @@
       return { root: charGroup, torso, head, lArm, rArm, lLeg, rLeg };
     }
 
-    // Local Player Instance
     const localCharParts = buildCharacterMesh(0x1976d2);
     const player = localCharParts.root;
     const spawnPos = new THREE.Vector3(0, -9.0, Math.sqrt(planetRadius * planetRadius - 81)).normalize().multiplyScalar(planetRadius);
@@ -601,21 +610,33 @@
     questHighlightMaterial = new THREE.LineBasicMaterial({ color: 0xffea00, linewidth: 3, transparent: true, opacity: 1.0 });
 
     // --- GAME FLOW LOGIC ---
-    function startGame(grade) {
-      playerGrade = grade;
+    function openGradeModal() {
+      document.getElementById('start-modal').style.display = 'flex';
+      document.getElementById('cancel-grade-btn').style.display = (gameState === 'start') ? 'none' : 'block';
+      document.getElementById('grade-hint').style.display = (gameState === 'start') ? 'block' : 'none';
+    }
+
+    function closeGradeModal() {
       document.getElementById('start-modal').style.display = 'none';
-      document.getElementById('hud-room').innerText = "SOLO";
-      document.getElementById('hud-players').innerText = "1";
-      document.getElementById('inst-text').innerText = `Math Curriculum Active (Grade ${grade}) • W A S D to Move`;
+      window.focus(); renderer.domElement.focus();
+    }
+
+    function selectGrade(g) {
+      playerGrade = g;
+      document.getElementById('grade-btn-hud').innerText = "GRADE " + g;
+      document.getElementById('start-modal').style.display = 'none';
       
-      gameState = 'playing'; 
-      clock.start();
+      if (gameState === 'start') {
+        document.getElementById('hud-room').innerText = "SOLO";
+        document.getElementById('hud-players').innerText = "1";
+        document.getElementById('inst-text').innerText = `Math Curriculum Active (Grade ${g}) • W A S D to Move`;
+        gameState = 'playing'; clock.start();
+        setTimeout(assignNewQuest, 1500);
+      } else {
+        document.getElementById('inst-text').innerText = `Curriculum Changed to Grade ${g}`;
+      }
       
-      window.focus();
-      document.body.focus();
-      renderer.domElement.focus();
-      
-      setTimeout(assignNewQuest, 1500);
+      window.focus(); renderer.domElement.focus();
     }
 
     // --- MULTIPLAYER MODAL & PEERJS SETUP ---
@@ -628,8 +649,7 @@
 
     function closeMultiplayerModal() {
       document.getElementById('mp-modal').style.display = 'none';
-      window.focus();
-      renderer.domElement.focus();
+      window.focus(); renderer.domElement.focus();
     }
 
     function backToMpChoose() {
@@ -639,8 +659,7 @@
     }
 
     function generateRoomCode() { 
-      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; 
-      let code = ""; 
+      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let code = ""; 
       for (let i = 0; i < 4; i++) code += chars.charAt(Math.floor(Math.random() * chars.length)); 
       return code; 
     }
@@ -655,10 +674,7 @@
       document.getElementById('host-code-display').innerText = currentRoomCode;
 
       if (myPeer) { try { myPeer.destroy(); } catch(e){} }
-      
-      myPeer = new Peer(hostPeerId, peerConfig); 
-      isHost = true; 
-      isMultiplayer = true;
+      myPeer = new Peer(hostPeerId, peerConfig); isHost = true; isMultiplayer = true;
       document.getElementById('hud-room').innerText = currentRoomCode;
 
       myPeer.on('open', (id) => { 
@@ -667,17 +683,10 @@
         startNetworkBroadcastLoop();
       });
 
-      myPeer.on('connection', (conn) => { 
-        handleIncomingConnection(conn); 
-      });
-
+      myPeer.on('connection', (conn) => { handleIncomingConnection(conn); });
       myPeer.on('error', (err) => { 
-        console.warn("PeerJS Host Error:", err);
-        if (err.type === 'unavailable-id') {
-          showHostUI(); // Regenerate code on rare collision
-        } else {
-          document.getElementById('host-status').innerText = "Network error. Please try again.";
-        }
+        if (err.type === 'unavailable-id') showHostUI(); 
+        else document.getElementById('host-status').innerText = "Network error. Please try again.";
       });
     }
 
@@ -689,96 +698,53 @@
 
     function joinRoom() {
       const rawCode = document.getElementById('join-code-input').value.trim().toUpperCase();
-      if (rawCode.length < 4) { 
-        document.getElementById('join-status').innerText = "Please enter a 4-character code."; 
-        return; 
-      }
-      
+      if (rawCode.length < 4) { document.getElementById('join-status').innerText = "Please enter a 4-character code."; return; }
       document.getElementById('join-status').innerText = "Connecting to room...";
-      currentRoomCode = rawCode; 
-      const targetHostId = "mathmetropolis-" + rawCode.toLowerCase();
+      currentRoomCode = rawCode; const targetHostId = "mathmetropolis-" + rawCode.toLowerCase();
 
       if (myPeer) { try { myPeer.destroy(); } catch(e){} }
-      myPeer = new Peer(peerConfig); 
-      isHost = false; 
-      isMultiplayer = true;
+      myPeer = new Peer(peerConfig); isHost = false; isMultiplayer = true;
       
       myPeer.on('open', () => {
         hostConnection = myPeer.connect(targetHostId, { reliable: true });
-
         const setupHostConn = () => {
           document.getElementById('mp-modal').style.display = 'none'; 
           document.getElementById('hud-room').innerText = currentRoomCode;
           document.getElementById('inst-text').innerText = `Connected to Room ${currentRoomCode}!`;
-          window.focus();
-          renderer.domElement.focus();
+          window.focus(); renderer.domElement.focus();
           startNetworkBroadcastLoop();
         };
 
-        if (hostConnection.open) {
-          setupHostConn();
-        } else {
-          hostConnection.on('open', setupHostConn);
-        }
+        if (hostConnection.open) setupHostConn();
+        else hostConnection.on('open', setupHostConn);
 
-        hostConnection.on('data', (data) => { 
-          handleNetworkMessage(data); 
-        });
-
-        hostConnection.on('close', () => { 
-          document.getElementById('inst-text').innerText = "Host closed session."; 
-        });
-
-        hostConnection.on('error', (err) => {
-          document.getElementById('join-status').innerText = "Connection error. Check code & retry.";
-        });
+        hostConnection.on('data', (data) => { handleNetworkMessage(data); });
+        hostConnection.on('close', () => { document.getElementById('inst-text').innerText = "Host closed session."; });
+        hostConnection.on('error', (err) => { document.getElementById('join-status').innerText = "Connection error. Check code & retry."; });
       });
 
-      myPeer.on('error', (err) => { 
-        console.warn("PeerJS Client Error:", err);
-        document.getElementById('join-status').innerText = "Could not reach host. Verify code."; 
-      });
+      myPeer.on('error', (err) => { document.getElementById('join-status').innerText = "Could not reach host. Verify code."; });
     }
 
     function handleIncomingConnection(conn) {
-      clientConnections[conn.peer] = conn; 
-      updatePlayerCountHUD();
-
+      clientConnections[conn.peer] = conn; updatePlayerCountHUD();
       const sendInitState = () => {
-        conn.send({ 
-          type: 'init_sync', 
-          grade: playerGrade, 
-          score: correctAnswersCount, 
-          questIndex: questTargetIndex 
-        });
+        conn.send({ type: 'init_sync', grade: playerGrade, score: correctAnswersCount, questIndex: questTargetIndex });
       };
 
-      if (conn.open) {
-        sendInitState();
-      } else {
-        conn.on('open', sendInitState);
-      }
+      if (conn.open) sendInitState(); else conn.on('open', sendInitState);
 
       conn.on('data', (data) => {
         handleNetworkMessage(data, conn.peer);
-        // Relay to other peers in star topology
         for (let otherId in clientConnections) { 
-          if (otherId !== conn.peer && clientConnections[otherId].open) {
-            clientConnections[otherId].send(data); 
-          }
+          if (otherId !== conn.peer && clientConnections[otherId].open) clientConnections[otherId].send(data); 
         }
       });
 
-      conn.on('close', () => { 
-        removeRemotePlayer(conn.peer); 
-        delete clientConnections[conn.peer]; 
-        updatePlayerCountHUD(); 
-      });
+      conn.on('close', () => { removeRemotePlayer(conn.peer); delete clientConnections[conn.peer]; updatePlayerCountHUD(); });
     }
 
-    function updatePlayerCountHUD() { 
-      document.getElementById('hud-players').innerText = String(Object.keys(clientConnections).length + 1); 
-    }
+    function updatePlayerCountHUD() { document.getElementById('hud-players').innerText = String(Object.keys(clientConnections).length + 1); }
 
     function createRemotePlayer(peerId) {
       const colorIndex = (Object.keys(remotePlayers).length + 1) % suitColorPalette.length;
@@ -790,64 +756,43 @@
     }
 
     function removeRemotePlayer(peerId) {
-      if (remotePlayers[peerId]) { 
-        scene.remove(remotePlayers[peerId].parts.root); 
-        delete remotePlayers[peerId]; 
-      }
+      if (remotePlayers[peerId]) { scene.remove(remotePlayers[peerId].parts.root); delete remotePlayers[peerId]; }
     }
 
     function handleNetworkMessage(data) {
       if (data.type === 'player_transform') {
-        const id = data.peerId; 
-        if (!id) return;
+        const id = data.peerId; if (!id) return;
         if (!remotePlayers[id]) createRemotePlayer(id);
-        const rp = remotePlayers[id]; 
-        rp.targetPos.set(data.x, data.y, data.z); 
-        rp.targetQuat.set(data.qx, data.qy, data.qz, data.qw); 
-        rp.walkCycle = data.walkCycle;
+        const rp = remotePlayers[id]; rp.targetPos.set(data.x, data.y, data.z); rp.targetQuat.set(data.qx, data.qy, data.qz, data.qw); rp.walkCycle = data.walkCycle;
       } else if (data.type === 'init_sync') {
-        playerGrade = data.grade; 
-        correctAnswersCount = data.score; 
+        playerGrade = data.grade; correctAnswersCount = data.score; 
+        document.getElementById('grade-btn-hud').innerText = "GRADE " + playerGrade;
         document.getElementById('hud-score').innerText = String(correctAnswersCount);
         if (data.questIndex >= 0) syncQuestBuilding(data.questIndex);
       } else if (data.type === 'quest_assign') {
         syncQuestBuilding(data.index);
-        if (gameState === 'cooldown') { 
-          gameState = 'playing'; 
-          document.getElementById('inst-text').innerHTML = `New Quest Active! (Grade ${playerGrade})`; 
-        }
+        if (gameState === 'cooldown') { gameState = 'playing'; document.getElementById('inst-text').innerHTML = `New Quest Active! (Grade ${playerGrade})`; }
       } else if (data.type === 'quest_flag') {
-        placeNetworkFlag(data.buildingIndex, data.success); 
+        placeNetworkFlag(data.buildingIndex, data.success, data.grade); 
         if (isHost) startQuestCooldown();
       }
     }
 
     function syncQuestBuilding(idx) {
       if (questHighlightGroup && buildings[questTargetIndex]) { 
-        buildings[questTargetIndex].group.remove(beaconGroup); 
-        buildings[questTargetIndex].group.remove(questHighlightGroup); 
+        buildings[questTargetIndex].group.remove(beaconGroup); buildings[questTargetIndex].group.remove(questHighlightGroup); 
       }
       questTargetIndex = idx;
       if (buildings[questTargetIndex]) {
-        const target = buildings[questTargetIndex]; 
-        beaconGroup.position.set(0, target.topY + 6, 0); 
-        target.group.add(beaconGroup);
-        
+        const target = buildings[questTargetIndex]; beaconGroup.position.set(0, target.topY + 6, 0); target.group.add(beaconGroup);
         questHighlightGroup = new THREE.Group();
         target.group.traverse((child) => {
           if (child.isMesh && child !== beaconCore && child !== beaconAura) {
-            const edges = new THREE.EdgesGeometry(child.geometry, 25); 
-            const oAmt = 0.035; 
-            const thickOffsets = [ 
-              new THREE.Vector3(0,0,0), new THREE.Vector3(oAmt,0,0), new THREE.Vector3(-oAmt,0,0), 
-              new THREE.Vector3(0,oAmt,0), new THREE.Vector3(0,-oAmt,0), new THREE.Vector3(0,0,oAmt), new THREE.Vector3(0,0,-oAmt) 
-            ];
+            const edges = new THREE.EdgesGeometry(child.geometry, 25); const oAmt = 0.035; 
+            const thickOffsets = [ new THREE.Vector3(0,0,0), new THREE.Vector3(oAmt,0,0), new THREE.Vector3(-oAmt,0,0), new THREE.Vector3(0,oAmt,0), new THREE.Vector3(0,-oAmt,0), new THREE.Vector3(0,0,oAmt), new THREE.Vector3(0,0,-oAmt) ];
             thickOffsets.forEach(offset => {
               const line = new THREE.LineSegments(edges, questHighlightMaterial);
-              line.position.copy(child.position).add(offset); 
-              line.rotation.copy(child.rotation); 
-              line.scale.copy(child.scale); 
-              questHighlightGroup.add(line);
+              line.position.copy(child.position).add(offset); line.rotation.copy(child.rotation); line.scale.copy(child.scale); questHighlightGroup.add(line);
             });
           }
         });
@@ -855,26 +800,59 @@
       }
     }
 
-    function placeNetworkFlag(idx, success) {
+    // --- CANVAS TEXTURE FLAG GENERATOR ---
+    function createFlag(colorHex, gradeText) {
+      const flagGroup = new THREE.Group();
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 4.2, 6), getMat(0x90a4ae)); 
+      pole.position.y = 1.6; pole.castShadow = true;
+      
+      const canvas = document.createElement('canvas');
+      canvas.width = 256; canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      
+      const colorStr = '#' + colorHex.toString(16).padStart(6, '0');
+      ctx.fillStyle = colorStr;
+      ctx.fillRect(0, 0, 256, 128);
+      
+      if (gradeText) {
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 70px "Segoe UI", Tahoma, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'rgba(0,0,0,0.4)';
+        ctx.shadowBlur = 6;
+        ctx.fillText('G' + gradeText, 128, 64);
+      }
+      
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.minFilter = THREE.LinearFilter; 
+      
+      const fabricMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 });
+      const fabric = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.0, 0.08), fabricMat); 
+      fabric.position.set(0.75, 3.1, 0); fabric.castShadow = true;
+      
+      flagGroup.add(pole, fabric); 
+      return flagGroup;
+    }
+
+    function placeNetworkFlag(idx, success, grade) {
       if (buildings[idx]) {
         const target = buildings[idx];
         target.group.remove(beaconGroup);
         if (questHighlightGroup) { target.group.remove(questHighlightGroup); questHighlightGroup = null; }
         
-        const flag = createFlag(success ? 0x00e676 : 0xd32f2f);
+        const flag = createFlag(success ? 0x00e676 : 0xd32f2f, grade);
         flag.position.set(target.radius * 0.85, 0, target.radius * 0.85);
         target.group.add(flag); target.completed = true;
 
         if (success) {
           correctAnswersCount++; 
           document.getElementById('hud-score').innerText = String(correctAnswersCount);
-          document.getElementById('inst-text').innerText = "Teammate solved the quest! Green Flag raised!";
+          document.getElementById('inst-text').innerText = "Teammate solved the quest! Grade " + grade + " flag raised!";
           if (correctAnswersCount % 10 === 0) triggerFireworks();
         }
         if (gameState === 'prompt' && questTargetIndex === idx) {
-          document.getElementById('quest-modal').style.display = 'none'; 
-          gameState = 'cooldown'; 
-          interactInRange = false;
+          document.getElementById('quest-modal').style.display = 'none'; gameState = 'cooldown'; interactInRange = false;
         }
       }
     }
@@ -884,16 +862,13 @@
       networkBroadcastTimer = setInterval(() => {
         if (!isMultiplayer || !myPeer || !myPeer.id) return;
         const msg = { 
-          type: 'player_transform', 
-          peerId: myPeer.id, 
+          type: 'player_transform', peerId: myPeer.id, 
           x: player.position.x, y: player.position.y, z: player.position.z, 
           qx: player.quaternion.x, qy: player.quaternion.y, qz: player.quaternion.z, qw: player.quaternion.w, 
           walkCycle: walkCycle 
         };
         if (isHost) { 
-          for (let id in clientConnections) { 
-            if (clientConnections[id].open) clientConnections[id].send(msg); 
-          } 
+          for (let id in clientConnections) { if (clientConnections[id].open) clientConnections[id].send(msg); } 
         } else if (hostConnection && hostConnection.open) { 
           hostConnection.send(msg); 
         }
@@ -906,9 +881,9 @@
       if (isHost) { for (let id in clientConnections) { if (clientConnections[id].open) clientConnections[id].send(msg); } }
     }
 
-    function broadcastQuestFlag(buildingIndex, success) {
+    function broadcastQuestFlag(buildingIndex, success, grade) {
       if (!isMultiplayer) return;
-      const msg = { type: 'quest_flag', buildingIndex: buildingIndex, success: success };
+      const msg = { type: 'quest_flag', buildingIndex: buildingIndex, success: success, grade: grade };
       if (isHost) { for (let id in clientConnections) { if (clientConnections[id].open) clientConnections[id].send(msg); } } 
       else if (hostConnection && hostConnection.open) { hostConnection.send(msg); }
     }
@@ -936,13 +911,6 @@
       gameState = 'playing'; document.getElementById('inst-text').innerHTML = `New Quest Active! (Grade ${playerGrade})`;
     }
 
-    function createFlag(colorHex) {
-      const flagGroup = new THREE.Group();
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 4.2, 6), getMat(0x90a4ae)); pole.position.y = 1.6; pole.castShadow = true;
-      const fabric = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.0, 0.08), getMat(colorHex)); fabric.position.set(0.75, 3.1, 0); fabric.castShadow = true;
-      flagGroup.add(pole, fabric); return flagGroup;
-    }
-
     function triggerQuestPrompt() {
       if (gameState !== 'playing' || !interactInRange) return;
       gameState = 'prompt'; document.getElementById('interact-btn').style.display = 'none';
@@ -963,28 +931,33 @@
       if (target) {
         target.group.remove(beaconGroup);
         if (questHighlightGroup) { target.group.remove(questHighlightGroup); questHighlightGroup.traverse(c => { if (c.geometry) c.geometry.dispose(); }); questHighlightGroup = null; }
-        const flag = createFlag(success ? 0x00e676 : 0xd32f2f); flag.position.set(target.radius * 0.85, 0, target.radius * 0.85);
+        
+        const flag = createFlag(success ? 0x00e676 : 0xd32f2f, playerGrade); 
+        flag.position.set(target.radius * 0.85, 0, target.radius * 0.85);
         target.group.add(flag); target.completed = true; 
       }
 
-      broadcastQuestFlag(questTargetIndex, success); interactInRange = false;
+      broadcastQuestFlag(questTargetIndex, success, playerGrade); 
+      interactInRange = false;
       
       if (success) {
-        correctAnswersCount++; document.getElementById('hud-score').innerText = String(correctAnswersCount); document.getElementById('inst-text').innerText = "Correct! Green Flag Raised!";
+        correctAnswersCount++; document.getElementById('hud-score').innerText = String(correctAnswersCount); 
+        document.getElementById('inst-text').innerText = `Correct! Grade ${playerGrade} flag raised!`;
         if (correctAnswersCount > 0 && correctAnswersCount % 10 === 0) {
           triggerFireworks(); gameState = 'milestone'; setTimeout(() => { document.getElementById('milestone-modal').style.display = 'flex'; }, 1500);
         } else { startQuestCooldown(); }
-      } else { document.getElementById('inst-text').innerText = "Incorrect! Red Flag Raised."; startQuestCooldown(); }
+      } else { 
+        document.getElementById('inst-text').innerText = `Incorrect! Grade ${playerGrade} Red Flag raised.`; 
+        startQuestCooldown(); 
+      }
       
-      window.focus();
-      renderer.domElement.focus();
+      window.focus(); renderer.domElement.focus();
     }
 
     // --- BULLETPROOF KEYBOARD INPUT HANDLING ---
     const handleKeyDown = (e) => {
       const k = e.key ? e.key.toLowerCase() : '';
       const c = e.code || '';
-
       if (k === 'w' || c === 'KeyW' || k === 'arrowup' || c === 'ArrowUp') keys.w = true;
       if (k === 's' || c === 'KeyS' || k === 'arrowdown' || c === 'ArrowDown') keys.s = true;
       if (k === 'a' || c === 'KeyA' || k === 'arrowleft' || c === 'ArrowLeft') keys.a = true;
@@ -992,10 +965,7 @@
 
       if (k === ' ' || c === 'Space') { 
         e.preventDefault(); 
-        if (isGrounded && gameState !== 'prompt' && gameState !== 'start') { 
-          radialVelocity = jumpStrength; 
-          isGrounded = false; 
-        } 
+        if (isGrounded && gameState !== 'prompt' && gameState !== 'start') { radialVelocity = jumpStrength; isGrounded = false; } 
       }
       if (k === 'r' || c === 'KeyR') triggerQuestPrompt();
     };
@@ -1003,19 +973,14 @@
     const handleKeyUp = (e) => {
       const k = e.key ? e.key.toLowerCase() : '';
       const c = e.code || '';
-
       if (k === 'w' || c === 'KeyW' || k === 'arrowup' || c === 'ArrowUp') keys.w = false;
       if (k === 's' || c === 'KeyS' || k === 'arrowdown' || c === 'ArrowDown') keys.s = false;
       if (k === 'a' || c === 'KeyA' || k === 'arrowleft' || c === 'ArrowLeft') keys.a = false;
       if (k === 'd' || c === 'KeyD' || k === 'arrowright' || c === 'ArrowRight') keys.d = false;
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('keyup', handleKeyUp);
-
-    // Auto-focus on canvas taps
+    window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp);
+    document.addEventListener('keydown', handleKeyDown); document.addEventListener('keyup', handleKeyUp);
     window.addEventListener('click', () => { window.focus(); renderer.domElement.focus(); });
     window.addEventListener('pointerdown', () => { window.focus(); renderer.domElement.focus(); });
 
@@ -1024,9 +989,7 @@
     const jumpBtn = document.getElementById('jump-btn'); const interactBtn = document.getElementById('interact-btn');
     let center = { x: 0, y: 0 }; const maxDist = 40;
 
-    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) { 
-      joystickZone.style.display = 'block'; jumpBtn.style.display = 'flex'; 
-    }
+    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) { joystickZone.style.display = 'block'; jumpBtn.style.display = 'flex'; }
 
     joystickZone.addEventListener('touchstart', (e) => {
       isDragging = true; center = { x: joystickZone.getBoundingClientRect().left + 55, y: joystickZone.getBoundingClientRect().top + 55 };
@@ -1096,8 +1059,6 @@
     }
 
     // --- MAIN ENGINE ANIMATION LOOP ---
-    let walkCycle = 0; let prevCamForward = initForward.clone(); let cumulativeCameraYawDeg = 0;
-
     function animate() {
       requestAnimationFrame(animate);
       if (gameState === 'start') { renderer.render(scene, camera); return; }
@@ -1116,27 +1077,19 @@
         if (questHighlightMaterial) questHighlightMaterial.opacity = 0.5 + Math.sin(Date.now() * 0.007) * 0.5;
       }
 
-      // Smooth Interpolation of Remote Players
       for (let id in remotePlayers) {
         const rp = remotePlayers[id];
-        rp.parts.root.position.lerp(rp.targetPos, 0.2); 
-        rp.parts.root.quaternion.slerp(rp.targetQuat, 0.2);
-        rp.parts.lArm.rotation.x = Math.sin(rp.walkCycle) * 0.75; 
-        rp.parts.rArm.rotation.x = -Math.sin(rp.walkCycle) * 0.75;
-        rp.parts.lLeg.rotation.x = -Math.sin(rp.walkCycle) * 0.65; 
-        rp.parts.rLeg.rotation.x = Math.sin(rp.walkCycle) * 0.65;
-        rp.parts.lLeg.position.y = 0.75 + Math.max(0, -Math.sin(rp.walkCycle) * 0.15); 
-        rp.parts.rLeg.position.y = 0.75 + Math.max(0, Math.sin(rp.walkCycle) * 0.15);
+        rp.parts.root.position.lerp(rp.targetPos, 0.2); rp.parts.root.quaternion.slerp(rp.targetQuat, 0.2);
+        rp.parts.lArm.rotation.x = Math.sin(rp.walkCycle) * 0.75; rp.parts.rArm.rotation.x = -Math.sin(rp.walkCycle) * 0.75;
+        rp.parts.lLeg.rotation.x = -Math.sin(rp.walkCycle) * 0.65; rp.parts.rLeg.rotation.x = Math.sin(rp.walkCycle) * 0.65;
+        rp.parts.lLeg.position.y = 0.75 + Math.max(0, -Math.sin(rp.walkCycle) * 0.15); rp.parts.rLeg.position.y = 0.75 + Math.max(0, Math.sin(rp.walkCycle) * 0.15);
         rp.parts.torso.position.y = 0.85 + Math.abs(Math.sin(rp.walkCycle * 2)) * 0.08;
       }
 
-      // Input Movement
       let mX = 0, mZ = 0;
       if (gameState === 'playing' || gameState === 'cooldown' || gameState === 'explore') {
-        if (keys.w || keys.ArrowUp) mZ -= 1; 
-        if (keys.s || keys.ArrowDown) mZ += 1;
-        if (keys.a || keys.ArrowLeft) mX -= 1; 
-        if (keys.d || keys.ArrowRight) mX += 1;
+        if (keys.w || keys.ArrowUp) mZ -= 1; if (keys.s || keys.ArrowDown) mZ += 1;
+        if (keys.a || keys.ArrowLeft) mX -= 1; if (keys.d || keys.ArrowRight) mX += 1;
         if (joyX !== 0 || joyY !== 0) { mX = joyX; mZ = joyY; }
       }
 
@@ -1153,13 +1106,9 @@
         let tPos = pGround.clone().add(dMove).normalize().multiplyScalar(planetRadius);
         
         let col = false;
-        for (let i = 0; i < colliders.length; i++) { 
-          if (tPos.distanceTo(colliders[i].pos) < colliders[i].radius + 0.9) { col = true; break; } 
-        }
+        for (let i = 0; i < colliders.length; i++) { if (tPos.distanceTo(colliders[i].pos) < colliders[i].radius + 0.9) { col = true; break; } }
         
-        if (!col) { 
-          pGround.copy(tPos); 
-        } else {
+        if (!col) { pGround.copy(tPos); } else {
           let sX = pGround.clone().add(cRight.clone().multiplyScalar(mX * moveSpeed)).normalize().multiplyScalar(planetRadius);
           let sZ = pGround.clone().add(cFwd.clone().multiplyScalar(-mZ * moveSpeed)).normalize().multiplyScalar(planetRadius);
           let cx = false, cz = false;
@@ -1230,7 +1179,6 @@
       }
       updateDirectionCompass(questRelAngleDeg, questDistMeters, cumulativeCameraYawDeg);
 
-      // Dynamic Seasons
       const el = clock.getElapsedTime(); const yrFrac = (el % YEAR_DURATION) / YEAR_DURATION;
       const sIdx = Math.floor(yrFrac * 4); const nIdx = (sIdx + 1) % 4; const sBlend = (yrFrac * 4) % 1;
       
@@ -1239,7 +1187,6 @@
       const cBush = new THREE.Color([0x7cb342, 0x33691e, 0xbf360c, 0xcfd8dc][sIdx]).lerp(new THREE.Color([0x7cb342, 0x33691e, 0xbf360c, 0xcfd8dc][nIdx]), sBlend); bushFoliageMat.color.lerp(cBush, 0.05);
       const tGrd = new THREE.Color([0x5a9e32, 0x2d7a27, 0x8a622a, 0xdce5ed][sIdx]).lerp(new THREE.Color([0x5a9e32, 0x2d7a27, 0x8a622a, 0xdce5ed][nIdx]), sBlend); planet.material.color.lerp(tGrd, 0.05);
 
-      // Day / Night Cycle
       const dAng = (el % DAY_DURATION) / DAY_DURATION * Math.PI * 2;
       dirLight.position.set(Math.cos(dAng) * 260, Math.sin(dAng) * 230, Math.sin(dAng * 0.5) * 80);
       moonLight.position.copy(dirLight.position).negate();
