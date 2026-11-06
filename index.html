@@ -1,1211 +1,302 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <style>
-    body { 
-      margin: 0; overflow: hidden; 
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-      background: #7ec0ee; touch-action: none; 
-      -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
-    }
-    #gameCanvas { display: block; width: 100vw; height: 100vh; }
-    
-    /* --- HUD OVERLAYS --- */
-    #ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StoMo Creator</title>
+<style>
+  body {
+    margin: 0; padding: 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #121212; color: #ffffff; display: flex; flex-direction: column; align-items: center;
+  }
+  h1 { margin-top: 0; }
+  .app-container {
+    display: flex; flex-direction: column; width: 100%; max-width: 800px; gap: 20px;
+  }
+  
+  .viewer-container {
+    position: relative; width: 100%; aspect-ratio: 16/9; background-color: #000; 
+    border-radius: 8px; overflow: hidden; border: 2px solid #333;
+  }
+  video, canvas#previewCanvas {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover;
+  }
+  canvas#previewCanvas { pointer-events: none; }
+  
+  .controls {
+    display: flex; justify-content: space-between; align-items: center; padding: 15px; 
+    background: #1e1e1e; border-radius: 8px; flex-wrap: wrap; gap: 10px;
+  }
+  .control-group { display: flex; gap: 10px; align-items: center; }
+  
+  button {
+    padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold; 
+    cursor: pointer; transition: background 0.2s; color: white;
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  
+  .btn-primary { background-color: #4CAF50; }
+  .btn-primary:hover:not(:disabled) { background-color: #45a049; }
+  
+  /* Dynamic Play/Stop Button Colors */
+  .btn-blue { background-color: #007bff; }
+  .btn-blue:hover:not(:disabled) { background-color: #0056b3; }
+  
+  .btn-red { background-color: #8b0000; }
+  .btn-red:hover:not(:disabled) { background-color: #600000; }
+  
+  .btn-danger { background-color: #f44336; }
+  .btn-danger:hover:not(:disabled) { background-color: #da190b; }
+  
+  .btn-secondary { background-color: #555; }
+  .btn-secondary:hover:not(:disabled) { background-color: #444; }
 
-    /* Compass */
-    #compass-container {
-      position: absolute; top: 0; left: 0; width: 100vw; height: 46px; 
-      background: linear-gradient(180deg, rgba(15, 23, 42, 0.9) 0%, rgba(15, 23, 42, 0.55) 75%, transparent 100%);
-      border-bottom: 1.5px solid rgba(255, 255, 255, 0.2);
-      box-shadow: 0 4px 18px rgba(0,0,0,0.35); overflow: hidden; pointer-events: none;
-    }
-    #compassCanvas { width: 100vw; height: 46px; display: block; }
-    #compass-pointer {
-      position: absolute; top: 0; left: 50%; transform: translateX(-50%);
-      width: 0; height: 0; border-left: 7px solid transparent;
-      border-right: 7px solid transparent; border-top: 8px solid #ff3d00;
-    }
+  .timeline {
+    display: flex; gap: 10px; overflow-x: auto; padding: 15px; 
+    background: #1e1e1e; border-radius: 8px; min-height: 80px;
+  }
+  .frame-thumb {
+    width: 100px; height: 56px; background-color: #333; border-radius: 4px; 
+    object-fit: cover; border: 2px solid transparent;
+  }
+  
+  .toggle-container {
+    display: flex; align-items: center; gap: 8px; font-size: 14px;
+  }
+  input[type="checkbox"] { accent-color: #4CAF50; width: 16px; height: 16px; }
 
-    /* Seasonal & Time HUD */
-    #season-hud {
-      position: absolute; top: 56px; left: 16px; background: rgba(15, 23, 42, 0.78);
-      backdrop-filter: blur(6px); border: 1px solid rgba(255, 255, 255, 0.25);
-      border-radius: 12px; padding: 8px 16px; display: flex; align-items: center; gap: 10px;
-      color: #fff; box-shadow: 0 4px 14px rgba(0,0,0,0.3); pointer-events: none;
-    }
-    #season-icon { font-size: 20px; }
-    #season-info { display: flex; flex-direction: column; }
-    #season-name { font-size: 13px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: #ffea00; }
-    #time-clock { font-size: 11px; font-weight: 600; color: rgba(255, 255, 255, 0.85); letter-spacing: 0.5px; }
-
-    /* Multiplayer, Score & Grade HUD */
-    #multiplayer-hud {
-      position: absolute; top: 56px; right: 16px; background: rgba(15, 23, 42, 0.78);
-      backdrop-filter: blur(6px); border: 1px solid rgba(255, 255, 255, 0.25);
-      border-radius: 12px; padding: 8px 16px; display: flex; align-items: center; gap: 14px;
-      color: #fff; box-shadow: 0 4px 14px rgba(0,0,0,0.3); pointer-events: auto;
-    }
-    .hud-stat { display: flex; flex-direction: column; align-items: center; }
-    .hud-val { font-size: 18px; font-weight: 800; color: #00e676; }
-    .hud-lbl { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; opacity: 0.8; }
-    
-    .hud-buttons { display: flex; flex-direction: column; gap: 6px; margin-left: 8px; }
-    #grade-btn-hud {
-      background: #7b1fa2; border: 1.5px solid #ce93d8; color: #fff; padding: 6px 12px; border-radius: 6px;
-      font-size: 11px; font-weight: 800; cursor: pointer; text-transform: uppercase; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    }
-    #grade-btn-hud:hover { background: #6a1b9a; }
-    #mp-btn {
-      background: #0288d1; border: 1.5px solid #4fc3f7; color: #fff; padding: 6px 12px; border-radius: 6px;
-      font-size: 11px; font-weight: 800; cursor: pointer; text-transform: uppercase; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    }
-    #mp-btn:hover { background: #0277bd; }
-
-    #instructions-box {
-      position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
-      background: rgba(15, 23, 42, 0.72); padding: 8px 24px; border-radius: 20px;
-      color: #fff; font-size: 14px; font-weight: 600; letter-spacing: 0.5px;
-      text-shadow: 0 1px 2px rgba(0,0,0,0.5); text-align: center; white-space: nowrap;
-    }
-
-    /* Mobile Controls */
-    #joystick-zone {
-      position: absolute; bottom: 85px; left: 30px; width: 110px; height: 110px;
-      background: rgba(255, 255, 255, 0.2); border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.45);
-      pointer-events: auto; display: none; z-index: 5;
-    }
-    #joystick-knob {
-      position: absolute; top: 27px; left: 27px; width: 56px; height: 56px;
-      background: rgba(255, 255, 255, 0.95); border-radius: 50%;
-      box-shadow: 0px 4px 0px rgba(0,0,0,0.2); pointer-events: none; transition: transform 0.05s ease-out;
-    }
-    .action-btn {
-      position: absolute; right: 30px; width: 74px; height: 74px; color: #fff; font-size: 14px; font-weight: 800; letter-spacing: 1px;
-      border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.6); display: none; align-items: center; justify-content: center;
-      pointer-events: auto; z-index: 5; cursor: pointer;
-    }
-    #jump-btn { bottom: 85px; background: #1976d2; box-shadow: 0px 5px 0px #0d47a1; }
-    #jump-btn:active { transform: translateY(4px); box-shadow: 0px 1px 0px #0d47a1; }
-    #interact-btn { bottom: 175px; background: #fbc02d; box-shadow: 0px 5px 0px #f57f17; color: #212121; }
-    #interact-btn:active { transform: translateY(4px); box-shadow: 0px 1px 0px #f57f17; }
-
-    /* Modals */
-    .modal-overlay {
-      position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
-      background: rgba(0,0,0,0.8); display: flex; flex-direction: column; 
-      align-items: center; justify-content: center; z-index: 50; pointer-events: auto;
-    }
-    .modal-box {
-      background: rgba(15, 23, 42, 0.96); border: 3px solid #ffea00; padding: 28px; border-radius: 16px; text-align: center;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.6); width: 88%; max-width: 440px;
-    }
-    .modal-box h2 { margin-top: 0; color: #ffea00; font-size: 26px; text-transform: uppercase; letter-spacing: 1.5px; }
-    .modal-box p { color: #fff; font-size: 15px; margin-bottom: 20px; font-weight: 500; }
-    
-    .ans-btn, .grade-btn, .menu-btn {
-      display: block; width: 100%; background: #1976d2; color: #fff; border: 2px solid #64b5f6; padding: 12px; margin-bottom: 10px; border-radius: 8px;
-      font-size: 15px; font-weight: bold; cursor: pointer; transition: background 0.2s; box-sizing: border-box;
-    }
-    .ans-btn:hover, .grade-btn:hover, .menu-btn:hover { background: #1565c0; }
-    .grade-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
-    .room-input {
-      width: 100%; padding: 12px; margin-bottom: 12px; border-radius: 8px; border: 2px solid #64b5f6;
-      background: #0f172a; color: #ffea00; font-size: 18px; font-weight: bold; text-align: center;
-      letter-spacing: 2px; text-transform: uppercase; box-sizing: border-box;
-    }
-    .btn-row { display: flex; gap: 10px; }
-    #quest-modal, #milestone-modal, #mp-modal { display: none; }
-  </style>
+  #error-msg {
+    display: none; background: #8b0000; color: white; padding: 15px; 
+    border-radius: 8px; margin-bottom: 20px;
+  }
+</style>
 </head>
-<body tabindex="0">
+<body>
 
-  <div id="ui-layer">
-    <div id="compass-container"><canvas id="compassCanvas"></canvas><div id="compass-pointer"></div></div>
-    
-    <div id="season-hud">
-      <div id="season-icon">🌸</div>
-      <div id="season-info"><span id="season-name">SPRING</span><span id="time-clock">YEAR 1 • DAY 1 • 12:00</span></div>
-    </div>
+<div class="app-container">
+  <h1>StoMo Creator</h1>
+  
+  <div id="error-msg">
+    <strong>Camera Access Denied</strong><br>
+    If you are on a Google Site, camera access is blocked in embedded iframes. Please host this tool on a standalone page.
+  </div>
 
-    <div id="multiplayer-hud">
-      <div class="hud-stat"><span class="hud-val" id="hud-room">SOLO</span><span class="hud-lbl">Room</span></div>
-      <div class="hud-stat"><span class="hud-val" id="hud-players">1</span><span class="hud-lbl">Players</span></div>
-      <div class="hud-stat"><span class="hud-val" id="hud-score">0</span><span class="hud-lbl">Stars</span></div>
-      <div class="hud-buttons">
-        <button id="grade-btn-hud" onclick="openGradeModal()">Grade 1</button>
-        <button id="mp-btn" onclick="openMultiplayerModal()">Multiplayer</button>
+  <div class="viewer-container">
+    <video id="cameraFeed" autoplay playsinline muted></video>
+    <canvas id="previewCanvas"></canvas> 
+  </div>
+
+  <div class="controls">
+    <!-- Left Side: Capture & Previous Frame -->
+    <div class="control-group">
+      <button id="captureBtn" class="btn-primary">Capture Frame</button>
+      <div class="toggle-container">
+        <input type="checkbox" id="onionSkinToggle">
+        <label for="onionSkinToggle">Previous Frame</label>
       </div>
     </div>
-    
-    <div id="instructions-box"><span id="inst-text">Welcome to Math Metropolis!</span></div>
-  </div>
 
-  <div id="joystick-zone"><div id="joystick-knob"></div></div>
-  <div id="jump-btn" class="action-btn">JUMP</div>
-  <div id="interact-btn" class="action-btn">QUEST</div>
+    <!-- Center: Playback Controls (Single Toggle Button) -->
+    <div class="control-group">
+      <label for="fps">FPS:</label>
+      <input type="number" id="fps" value="5" min="1" max="30" style="width: 50px; padding: 5px; border-radius: 4px; border: none;">
+      <button id="playStopBtn" class="btn-blue">Play</button>
+    </div>
 
-  <!-- Start & Change Grade Modal -->
-  <div id="start-modal" class="modal-overlay">
-    <div class="modal-box">
-      <h2>Math Metropolis</h2>
-      <p>Select your Grade Level (Ontario Curriculum):</p>
-      <div class="grade-grid">
-        <button class="grade-btn" onclick="selectGrade(1)">Grade 1</button>
-        <button class="grade-btn" onclick="selectGrade(2)">Grade 2</button>
-        <button class="grade-btn" onclick="selectGrade(3)">Grade 3</button>
-        <button class="grade-btn" onclick="selectGrade(4)">Grade 4</button>
-        <button class="grade-btn" onclick="selectGrade(5)">Grade 5</button>
-        <button class="grade-btn" onclick="selectGrade(6)">Grade 6</button>
-        <button class="grade-btn" onclick="selectGrade(7)">Grade 7</button>
-        <button class="grade-btn" onclick="selectGrade(8)">Grade 8</button>
-      </div>
-      <button id="cancel-grade-btn" class="menu-btn" style="background:#455a64; border-color:#90a4ae; display:none; margin-top:10px;" onclick="closeGradeModal()">Cancel</button>
-      <p id="grade-hint" style="font-size:12px; opacity:0.8; margin-top:8px;">You can join or host multiplayer sessions anytime from the top-right button.</p>
+    <!-- Right Side: Clear & Save -->
+    <div class="control-group">
+      <button id="clearBtn" class="btn-danger">Clear</button>
+      <button id="saveBtn" class="btn-secondary" disabled>Save Video</button>
     </div>
   </div>
 
-  <!-- Multiplayer Host / Join Modal -->
-  <div id="mp-modal" class="modal-overlay">
-    <div class="modal-box" id="mp-choose-view">
-      <h2>Multiplayer Mode</h2>
-      <p>Connect with other students in your classroom:</p>
-      <button class="menu-btn" style="background:#f57c00; border-color:#ffb74d;" onclick="showHostUI()">Host New Classroom</button>
-      <button class="menu-btn" style="background:#0288d1; border-color:#4fc3f7;" onclick="showJoinUI()">Join with Code</button>
-      <button class="menu-btn" style="background:#455a64; border-color:#90a4ae;" onclick="closeMultiplayerModal()">Close</button>
-    </div>
+  <div class="timeline" id="timeline"></div>
+</div>
 
-    <div class="modal-box" id="mp-host-view" style="display:none;">
-      <h2>Host Classroom</h2>
-      <p>Share this 4-letter Room Code with other students:</p>
-      <div id="host-code-display" style="font-size:32px; font-weight:800; letter-spacing:4px; color:#ffea00; margin:16px 0;">GENERATING...</div>
-      <p id="host-status" style="font-size:13px; opacity:0.8; color:#81d4fa;">Registering room...</p>
-      <button class="menu-btn" style="background:#2e7d32; border-color:#81c784;" onclick="closeMultiplayerModal()">Back to Game</button>
-    </div>
+<script>
+  const cameraFeed = document.getElementById('cameraFeed');
+  const previewCanvas = document.getElementById('previewCanvas');
+  const ctx = previewCanvas.getContext('2d');
+  const captureBtn = document.getElementById('captureBtn');
+  const onionSkinToggle = document.getElementById('onionSkinToggle');
+  const playStopBtn = document.getElementById('playStopBtn');
+  const fpsInput = document.getElementById('fps');
+  const clearBtn = document.getElementById('clearBtn');
+  const saveBtn = document.getElementById('saveBtn');
+  const timeline = document.getElementById('timeline');
+  const errorMsg = document.getElementById('error-msg');
 
-    <div class="modal-box" id="mp-join-view" style="display:none;">
-      <h2>Join Session</h2>
-      <p>Enter the 4-letter Room Code:</p>
-      <input type="text" id="join-code-input" class="room-input" placeholder="CODE" maxlength="4">
-      <div class="btn-row">
-        <button class="menu-btn" style="background:#455a64; border-color:#90a4ae;" onclick="backToMpChoose()">Back</button>
-        <button class="menu-btn" style="background:#0288d1; border-color:#4fc3f7;" onclick="joinRoom()">Join Game</button>
-      </div>
-      <p id="join-status" style="font-size:13px; color:#ff8a80; margin-top:8px;"></p>
-    </div>
-  </div>
+  let frames = [];
+  let isPlaying = false;
+  let playInterval;
+  let currentPlayIndex = 0;
+  let stream = null;
 
-  <!-- Quest Question Modal -->
-  <div id="quest-modal" class="modal-overlay">
-    <div class="modal-box">
-      <h2>Quest Master</h2>
-      <p id="quest-question">Question text?</p>
-      <button class="ans-btn" id="ans-0">Ans 1</button>
-      <button class="ans-btn" id="ans-1">Ans 2</button>
-      <button class="ans-btn" id="ans-2">Ans 3</button>
-    </div>
-  </div>
-
-  <!-- 10 Quests Milestone Modal -->
-  <div id="milestone-modal" class="modal-overlay">
-    <div class="modal-box">
-      <h2>Fantastic Job!</h2>
-      <p>10 Quests completed! The city celebrates your mathematical mastery with fireworks.</p>
-      <div class="btn-row">
-        <button class="ans-btn" style="background:#00e676; border-color:#b9f6ca;" onclick="continueGame()">Keep Playing</button>
-        <button class="ans-btn" style="background:#d32f2f; border-color:#ff8a80;" onclick="stopGame()">Explore Only</button>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    // --- GAME CONSTANTS & STATE ---
-    const planetRadius = 120;
-    const moveSpeed = 0.44;
-    const keys = { w: false, a: false, s: false, d: false, ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, ' ': false };
-    let joyX = 0; let joyY = 0; let isDragging = false;
-    
-    let isGrounded = true; let altitude = 0; let radialVelocity = 0;
-    const gravity = 0.032; const jumpStrength = 0.38;
-    
-    let gameState = 'start'; 
-    let playerGrade = 1;
-    let correctAnswersCount = 0;
-    const clock = new THREE.Clock();
-    const YEAR_DURATION = 3600; 
-    const DAY_DURATION = 60;    
-
-    let questTargetIndex = -1;
-    let beaconGroup = null; let beaconAura = null; let beaconLight = null;
-    let questHighlightGroup = null; let questHighlightMaterial = null;
-    let interactInRange = false; let availableQuests = []; 
-
-    // --- PEERJS MULTIPLAYER STATE ---
-    let isMultiplayer = false;
-    let isHost = false;
-    let myPeer = null;
-    let hostConnection = null;
-    const clientConnections = {};
-    const remotePlayers = {};
-    let currentRoomCode = "SOLO";
-    let networkBroadcastTimer = null;
-
-    const peerConfig = {
-      config: {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' },
-          { urls: 'stun:global.stun.twilio.com:3478' }
-        ]
-      }
-    };
-
-    const suitColorPalette = [0x1976d2, 0xd32f2f, 0x388e3c, 0x7b1fa2, 0xf57c00, 0x0097a7, 0x5d4037, 0xc2185b];
-
-    // --- PROCEDURAL CURRICULUM GENERATOR ---
-    function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
-    
-    function generateMathQuestion(grade) {
-      let q = "", ans = 0, w1 = 0, w2 = 0;
-      switch(grade) {
-        case 1:
-          let a1 = rand(1, 12); let b1 = rand(1, 18 - a1);
-          if (Math.random() > 0.5) { q = `What is ${a1} + ${b1}?`; ans = a1 + b1; } else { let m = a1 + b1; q = `What is ${m} - ${a1}?`; ans = b1; }
-          w1 = ans + rand(1, 3); w2 = Math.max(0, ans - rand(1, 3)); break;
-        case 2:
-          if (Math.random() > 0.35) { let a2 = rand(10, 45); let b2 = rand(10, 45); q = `What is ${a2} + ${b2}?`; ans = a2 + b2; w1 = ans + 10; w2 = ans - 5; } 
-          else { q = "How many sides does a pentagon have?"; ans = 5; w1 = 6; w2 = 8; } break;
-        case 3:
-          if (Math.random() > 0.5) { let a3 = rand(2, 9); let b3 = rand(2, 9); q = `What is ${a3} × ${b3}?`; ans = a3 * b3; w1 = ans + a3; w2 = ans - b3; } 
-          else { let num = rand(10, 40); q = `What is half of ${num * 2}?`; ans = num; w1 = num + 4; w2 = num - 2; } break;
-        case 4:
-          if (Math.random() > 0.35) { let a4 = rand(10, 20); let b4 = rand(3, 8); q = `What is ${a4} × ${b4}?`; ans = a4 * b4; w1 = ans + 10; w2 = ans - b4; } 
-          else { let l = rand(4, 9); let w = rand(3, 7); q = `Area of a ${l}m by ${w}m rectangle?`; ans = l * w; w1 = (l + w) * 2; w2 = l * w + 6; } break;
-        case 5:
-          if (Math.random() > 0.5) { let a5 = (rand(1, 80) / 10).toFixed(1); let b5 = (rand(1, 40) / 10).toFixed(1); q = `What is ${a5} + ${b5}?`; ans = (parseFloat(a5) + parseFloat(b5)).toFixed(1); w1 = (parseFloat(ans) + 1.0).toFixed(1); w2 = (parseFloat(ans) - 0.5).toFixed(1); } 
-          else { let c5 = rand(3, 11); q = `What is ${c5 * 12} ÷ 12?`; ans = c5; w1 = c5 + 2; w2 = c5 - 1; } break;
-        case 6:
-          if (Math.random() > 0.5) { let val = rand(2, 8) * 10; q = `What is 25% of ${val}?`; ans = val * 0.25; w1 = ans + 5; w2 = ans - 2; } 
-          else { let a6 = rand(2, 6); let b6 = rand(2, 6); q = `Solve: (${a6} + ${b6}) × 2`; ans = (a6 + b6) * 2; w1 = a6 + b6 * 2; w2 = ans + 4; } break;
-        case 7:
-          if (Math.random() > 0.5) { let a7 = rand(1, 12); let b7 = rand(10, 22); q = `Solve: ${a7} - ${b7}`; ans = a7 - b7; w1 = b7 - a7; w2 = ans - 3; } 
-          else { let x = rand(2, 8); let ansX = rand(2, 7); q = `If ${x}y = ${x * ansX}, what is y?`; ans = ansX; w1 = ansX + 2; w2 = ansX * 2; } break;
-        case 8:
-          if (Math.random() > 0.5) { let a8 = rand(3, 9); q = `What is ${a8} squared (${a8}²)?`; ans = a8 * a8; w1 = a8 * 2; w2 = (a8 + 1) * (a8 + 1); } 
-          else { let x = rand(2, 5); let b = rand(2, 8); let res = x * 4 + b; q = `Solve for x: 4x + ${b} = ${res}`; ans = x; w1 = x + 2; w2 = x - 1; } break;
-      }
-      let arr = [String(ans), String(w1), String(w2)];
-      if (arr[1] === arr[0]) arr[1] = String(Number(arr[1]) + 1);
-      if (arr[2] === arr[0] || arr[2] === arr[1]) arr[2] = String(Number(arr[2]) + 2);
-      arr.sort(() => Math.random() - 0.5);
-      return { q: q, a: arr, correct: arr.indexOf(String(ans)) };
-    }
-
-    // --- THREE.JS INITIALIZATION ---
-    const scene = new THREE.Scene();
-    const skyColor = new THREE.Color(0x7ec0ee);
-    scene.background = skyColor; scene.fog = new THREE.FogExp2(skyColor, 0.0065);
-
-    const aspect = window.innerWidth / window.innerHeight;
-    const camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 800);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap; 
-    document.body.appendChild(renderer.domElement);
-    renderer.domElement.tabIndex = 1;
-    renderer.domElement.style.outline = 'none';
-
-    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x37474f, 0.6); scene.add(hemiLight);
-    const dirLight = new THREE.DirectionalLight(0xfff8e7, 1.4);
-    dirLight.castShadow = true; dirLight.shadow.mapSize.width = 2048; dirLight.shadow.mapSize.height = 2048;
-    dirLight.shadow.camera.near = 50; dirLight.shadow.camera.far = 600;
-    dirLight.shadow.camera.left = -140; dirLight.shadow.camera.right = 140;
-    dirLight.shadow.camera.top = 140; dirLight.shadow.camera.bottom = -140;
-    scene.add(dirLight);
-    const moonLight = new THREE.DirectionalLight(0x90caf9, 0.3); scene.add(moonLight);
-
-    const planetMat = new THREE.MeshStandardMaterial({ color: 0x4a7c2b, roughness: 0.9, flatShading: true });
-    const planet = new THREE.Mesh(new THREE.SphereGeometry(planetRadius, 96, 96), planetMat);
-    planet.receiveShadow = true; scene.add(planet);
-
-    // --- PERFORMANCE MEMORY CACHE ---
-    const matCache = {};
-    function getMat(hex) {
-      if (!matCache[hex]) matCache[hex] = new THREE.MeshStandardMaterial({ color: hex, roughness: 0.75, flatShading: true });
-      return matCache[hex];
-    }
-    
-    const woodMat = getMat(0x4e342e);
-    const rockMat = getMat(0x78909c);
-    const decFoliageMat = new THREE.MeshStandardMaterial({ color: 0x1e8234, roughness: 0.8, flatShading: true });
-    const pineFoliageMat = new THREE.MeshStandardMaterial({ color: 0x1b5e20, roughness: 0.8, flatShading: true });
-    const bushFoliageMat = new THREE.MeshStandardMaterial({ color: 0x33691e, roughness: 0.8, flatShading: true });
-
-    const trunkGeo = new THREE.CylinderGeometry(0.35, 0.5, 2.6, 6);
-    const rootGeo = new THREE.CylinderGeometry(0.55, 0.65, 0.8, 6);
-    const decCrownGeo = new THREE.DodecahedronGeometry(1.8, 0);
-    const pineTrunkGeo = new THREE.CylinderGeometry(0.3, 0.4, 1.5, 6);
-    const pineLayer1Geo = new THREE.ConeGeometry(1.8, 2.5, 7);
-    const pineLayer2Geo = new THREE.ConeGeometry(1.4, 2.0, 7);
-    const pineLayer3Geo = new THREE.ConeGeometry(1.0, 1.5, 7);
-    const bushGeo = new THREE.DodecahedronGeometry(1.0, 0);
-    const rockGeo = new THREE.IcosahedronGeometry(1.0, 0);
-
-    const colliders = []; const buildings = []; const streetLampBulbs = [];
-
-    function anchorToPlanetSurface(group, surfacePos, randomRotY = true) {
-      group.position.copy(surfacePos);
-      const normal = surfacePos.clone().normalize();
-      group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
-      if (randomRotY) group.rotateY(Math.random() * Math.PI * 2);
-    }
-
-    // 160 Buildings
-    const wallColors = [0x546e7a, 0x78909c, 0x8d6e63, 0xa1887f, 0x6d4c41, 0xc2185b, 0xd32f2f, 0x1976d2, 0x0288d1, 0x00796b, 0x388e3c, 0xf57c00, 0x455a64, 0xb0bec5];
-    function createUniqueBuilding(surfacePos) {
-      const bGroup = new THREE.Group();
-      const wallMat = getMat(wallColors[Math.floor(Math.random() * wallColors.length)]); const windowMat = getMat(0x80deea);
-      const w = 5 + Math.random() * 5; const d = 5 + Math.random() * 5;
-      const totalH = 14 + Math.random() * 34; const tiers = Math.random() < 0.4 ? 1 : (Math.random() < 0.7 ? 2 : 3);
-      const isCyl = Math.random() < 0.2; const segs = Math.random() < 0.5 ? 6 : 8;
-      let currY = 0; let currW = w; let currD = d; let tH = totalH / tiers;
-
-      const skirt = new THREE.Mesh(new THREE.BoxGeometry(w + 0.6, 3.0, d + 0.6), getMat(0x263238)); skirt.position.y = -1.2; bGroup.add(skirt);
-      for (let t = 0; t < tiers; t++) {
-        let block = isCyl ? new THREE.Mesh(new THREE.CylinderGeometry(currW / 2 * 0.95, currW / 2, tH, segs), wallMat) : new THREE.Mesh(new THREE.BoxGeometry(currW, tH, currD), wallMat);
-        block.position.y = currY + tH / 2; block.castShadow = true; block.receiveShadow = true; bGroup.add(block);
-        let band = isCyl ? new THREE.Mesh(new THREE.CylinderGeometry(currW / 2 * 1.02, currW / 2 * 1.02, tH * 0.35, segs), windowMat) : new THREE.Mesh(new THREE.BoxGeometry(currW * 1.02, tH * 0.35, currD * 1.02), windowMat);
-        band.position.y = block.position.y; bGroup.add(band);
-        currY += tH; currW *= 0.8; currD *= 0.8;
-      }
-      anchorToPlanetSurface(bGroup, surfacePos, true); scene.add(bGroup);
-      const bRadius = Math.hypot(w, d) / 2 + 0.2;
-      buildings.push({ group: bGroup, type: 'building', pos: surfacePos.clone(), radius: bRadius, topY: currY, completed: false });
-      colliders.push({ pos: surfacePos.clone(), radius: bRadius });
-    }
-
-    const plazaCenter = new THREE.Vector3(0, 0, planetRadius);
-    for (let i = 0; i < 160; i++) {
-      const phi = Math.acos(-1 + (2 * i) / 160); const theta = Math.sqrt(160 * Math.PI) * phi;
-      const bPos = new THREE.Vector3().setFromSphericalCoords(planetRadius, phi, theta);
-      if (bPos.distanceTo(plazaCenter) > 28) createUniqueBuilding(bPos);
-    }
-    for (let i = 0; i < buildings.length; i++) { availableQuests.push(i); }
-
-    // Plaza Trees & Fountain
-    for (let t = 0; t < 8; t++) {
-      const angle = (t / 8) * Math.PI * 2;
-      const tPos = new THREE.Vector3(Math.cos(angle) * 16, Math.sin(angle) * 16, 0);
-      tPos.z = Math.sqrt(Math.max(0, planetRadius * planetRadius - tPos.x * tPos.x - tPos.y * tPos.y));
-      const tree = new THREE.Group();
-      const trunk = new THREE.Mesh(trunkGeo, woodMat); trunk.position.y = 1.2; trunk.castShadow = true; tree.add(trunk);
-      const root = new THREE.Mesh(rootGeo, woodMat); root.position.y = -0.3; tree.add(root);
-      const crown = new THREE.Mesh(decCrownGeo, decFoliageMat); crown.position.y = 3.2; crown.castShadow = true; tree.add(crown);
-      anchorToPlanetSurface(tree, tPos, true); scene.add(tree);
-      colliders.push({ pos: tPos.clone(), radius: 1.4 });
-    }
-
-    const fountainGroup = new THREE.Group();
-    const fountainBasin = new THREE.Mesh(new THREE.CylinderGeometry(4, 4.3, 1.4, 8), getMat(0x90a4ae)); fountainBasin.position.y = 0.5; fountainGroup.add(fountainBasin);
-    const water = new THREE.Mesh(new THREE.CylinderGeometry(3.7, 3.7, 0.2, 8), getMat(0x0288d1)); water.position.y = 1.1; fountainGroup.add(water);
-    const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 2.4, 6), getMat(0x90a4ae)); spout.position.y = 1.6; fountainGroup.add(spout);
-    anchorToPlanetSurface(fountainGroup, plazaCenter, false); scene.add(fountainGroup);
-    colliders.push({ pos: plazaCenter.clone(), radius: 4.5 });
-
-    // Urban Props
-    function createUrbanDecor(surfacePos, typeIndex) {
-      const dGroup = new THREE.Group(); let colRadius = 1.0;
-      switch(typeIndex % 4) {
-        case 0:
-          const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 4.4, 6), getMat(0x455a64)); pole.position.y = 2.0; pole.castShadow = true; dGroup.add(pole);
-          const lampHead = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.4, 0.8), getMat(0x263238)); lampHead.position.y = 4.2; dGroup.add(lampHead);
-          const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 8), new THREE.MeshStandardMaterial({ color: 0xfff59d, emissive: 0x000000, roughness: 0.3 })); bulb.position.y = 4.0; dGroup.add(bulb);
-          streetLampBulbs.push(bulb); colRadius = 0.9; break;
-        case 1:
-          const seat = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.2, 0.8), getMat(0x5d4037)); seat.position.y = 0.55; seat.castShadow = true; dGroup.add(seat);
-          const back = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.8, 0.15), getMat(0x5d4037)); back.position.set(0, 0.95, -0.35); back.castShadow = true; dGroup.add(back);
-          const leg1 = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.7, 0.7), getMat(0x263238)); leg1.position.set(-0.8, 0.25, 0); dGroup.add(leg1);
-          const leg2 = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.7, 0.7), getMat(0x263238)); leg2.position.set(0.8, 0.25, 0); dGroup.add(leg2);
-          colRadius = 1.25; break;
-        case 2:
-          const c1 = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 1.2), getMat(0x795548)); c1.position.y = 0.55; c1.castShadow = true; dGroup.add(c1);
-          colRadius = 1.35; break;
-        case 3:
-          const hydrant = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.35, 1.2, 8), getMat(0xd32f2f)); hydrant.position.y = 0.5; hydrant.castShadow = true; dGroup.add(hydrant);
-          colRadius = 0.75; break;
-      }
-      anchorToPlanetSurface(dGroup, surfacePos, true); scene.add(dGroup);
-      colliders.push({ pos: surfacePos.clone(), radius: colRadius });
-    }
-
-    for (let i = 0; i < 200; i++) {
-      const phi = Math.acos(-1 + (2 * Math.random())); const theta = Math.random() * Math.PI * 2;
-      const dPos = new THREE.Vector3().setFromSphericalCoords(planetRadius, phi, theta);
-      if (dPos.distanceTo(plazaCenter) > 22) createUrbanDecor(dPos, i);
-    }
-
-    // Dense Nature
-    function createNature(surfacePos, typeRand) {
-      const nGroup = new THREE.Group(); let colRadius = 1.0;
-      if (typeRand < 0.4) {
-        const trunk = new THREE.Mesh(trunkGeo, woodMat); trunk.position.y = 1.2; trunk.castShadow = true; nGroup.add(trunk);
-        const root = new THREE.Mesh(rootGeo, woodMat); root.position.y = -0.3; nGroup.add(root);
-        const crown = new THREE.Mesh(decCrownGeo, decFoliageMat); crown.position.y = 3.2; crown.castShadow = true; nGroup.add(crown);
-        const s = 0.8 + Math.random() * 0.4; nGroup.scale.set(s, s, s); colRadius = 1.4 * s;
-      } else if (typeRand < 0.7) {
-        const trunk = new THREE.Mesh(pineTrunkGeo, woodMat); trunk.position.y = 0.5; trunk.castShadow = true; nGroup.add(trunk);
-        const l1 = new THREE.Mesh(pineLayer1Geo, pineFoliageMat); l1.position.y = 1.8; l1.castShadow = true; nGroup.add(l1);
-        const l2 = new THREE.Mesh(pineLayer2Geo, pineFoliageMat); l2.position.y = 3.0; l2.castShadow = true; nGroup.add(l2);
-        const l3 = new THREE.Mesh(pineLayer3Geo, pineFoliageMat); l3.position.y = 4.0; l3.castShadow = true; nGroup.add(l3);
-        const s = 0.8 + Math.random() * 0.5; nGroup.scale.set(s, s, s); colRadius = 1.2 * s;
-      } else if (typeRand < 0.9) {
-        const bush = new THREE.Mesh(bushGeo, bushFoliageMat);
-        const s = 0.6 + Math.random() * 0.8; bush.scale.set(s, s * 0.8, s);
-        bush.position.y = s * 0.5; bush.castShadow = true; nGroup.add(bush); colRadius = s;
-      } else {
-        const rock = new THREE.Mesh(rockGeo, rockMat);
-        const s = 0.4 + Math.random() * 0.8; rock.scale.set(s, s * 0.7, s);
-        rock.position.y = s * 0.4; rock.castShadow = true; rock.rotation.set(Math.random(), Math.random(), Math.random());
-        nGroup.add(rock); colRadius = s * 0.8;
-      }
-      anchorToPlanetSurface(nGroup, surfacePos, true); scene.add(nGroup);
-      colliders.push({ pos: surfacePos.clone(), radius: colRadius });
-    }
-
-    for (let i = 0; i < 700; i++) {
-      const phi = Math.acos(-1 + (2 * Math.random())); const theta = Math.random() * Math.PI * 2;
-      const dPos = new THREE.Vector3().setFromSphericalCoords(planetRadius, phi, theta);
-      if (dPos.distanceTo(plazaCenter) > 28) createNature(dPos, Math.random());
-    }
-
-    // --- FIREWORKS SYSTEM ---
-    const fireworkCount = 500;
-    const fwGeo = new THREE.BufferGeometry();
-    const fwPos = new Float32Array(fireworkCount * 3);
-    const fwVel = [];
-    for (let i = 0; i < fireworkCount; i++) {
-      fwPos[i * 3] = 0; fwPos[i * 3 + 1] = 0; fwPos[i * 3 + 2] = 0;
-      fwVel.push(new THREE.Vector3((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2));
-    }
-    fwGeo.setAttribute('position', new THREE.BufferAttribute(fwPos, 3));
-    const fwMat = new THREE.PointsMaterial({ color: 0xffea00, size: 1.2, transparent: true, opacity: 1, blending: THREE.AdditiveBlending });
-    const fireworksSystem = new THREE.Points(fwGeo, fwMat);
-    fireworksSystem.visible = false; scene.add(fireworksSystem);
-
-    let fireworksActive = false; let fwTimer = 0;
-    function triggerFireworks() {
-      const pNorm = player.position.clone().normalize();
-      fireworksSystem.position.copy(player.position).add(pNorm.multiplyScalar(15));
-      fwMat.color.setHex(Math.random() * 0xffffff); fwMat.opacity = 1;
-      const positions = fwGeo.attributes.position.array;
-      for (let i = 0; i < fireworkCount; i++) {
-        positions[i * 3] = 0; positions[i * 3 + 1] = 0; positions[i * 3 + 2] = 0;
-        fwVel[i].set((Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5);
-      }
-      fwGeo.attributes.position.needsUpdate = true;
-      fireworksSystem.visible = true; fireworksActive = true; fwTimer = 0;
-    }
-
-    // --- REDESIGNED 3D CHARACTER GEOMETRY ---
-    function buildCharacterMesh(suitColorHex) {
-      const charGroup = new THREE.Group();
-      const suitMat = getMat(suitColorHex); const skinMat = getMat(0xfac096);
-      const whiteMat = getMat(0xfafafa); const hairMat = getMat(0x3e2723);
-      const darkMat = getMat(0x1a237e); const bootMat = getMat(0x543d2b);
-      const eyeMat = getMat(0x212121); const tieMat = getMat(0x0288d1);
-
-      // Torso & Suit
-      const torso = new THREE.Group(); torso.position.y = 0.85; charGroup.add(torso);
-      const shirt = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.78, 0.44), whiteMat); shirt.position.set(0, 0.38, 0.04); shirt.castShadow = true; torso.add(shirt);
-      for (let b = 0; b < 3; b++) { const btn = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.04), eyeMat); btn.position.set(0, 0.22 + b * 0.16, 0.27); torso.add(btn); }
-      const jacketBack = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.76, 0.48), suitMat); jacketBack.position.set(0, 0.38, -0.02); jacketBack.castShadow = true; torso.add(jacketBack);
-      const lLapel = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.74, 0.16), suitMat); lLapel.position.set(-0.25, 0.38, 0.20); lLapel.rotation.y = -0.15; lLapel.castShadow = true; torso.add(lLapel);
-      const rLapel = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.74, 0.16), suitMat); rLapel.position.set(0.25, 0.38, 0.20); rLapel.rotation.y = 0.15; rLapel.castShadow = true; torso.add(rLapel);
-      const jacketSkirt = new THREE.Mesh(new THREE.BoxGeometry(0.70, 0.22, 0.52), suitMat); jacketSkirt.position.set(0, 0.02, 0.0); jacketSkirt.castShadow = true; torso.add(jacketSkirt);
-      const bowKnot = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.06), tieMat); bowKnot.position.set(0, 0.68, 0.27); torso.add(bowKnot);
-      const bowLeft = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.10, 0.05), tieMat); bowLeft.position.set(-0.11, 0.68, 0.26); bowLeft.rotation.z = -0.12; torso.add(bowLeft);
-      const bowRight = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.10, 0.05), tieMat); bowRight.position.set(0.11, 0.68, 0.26); bowRight.rotation.z = 0.12; torso.add(bowRight);
-
-      // Arms
-      const lArm = new THREE.Group(); lArm.position.set(-0.46, 0.68, 0); torso.add(lArm);
-      const lShoulder = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.15, 0.42, 6), suitMat); lShoulder.position.y = -0.18; lShoulder.castShadow = true; lArm.add(lShoulder);
-      const lForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.13, 0.38, 6), suitMat); lForearm.position.set(0, -0.46, 0.03); lForearm.rotation.x = -0.15; lForearm.castShadow = true; lArm.add(lForearm);
-      const lCuff = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.08, 6), whiteMat); lCuff.position.set(0, -0.66, 0.06); lArm.add(lCuff);
-      const lHand = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.18, 0.16), skinMat); lHand.position.set(0, -0.76, 0.07); lHand.castShadow = true; lArm.add(lHand);
-
-      const rArm = new THREE.Group(); rArm.position.set(0.46, 0.68, 0); torso.add(rArm);
-      const rShoulder = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.15, 0.42, 6), suitMat); rShoulder.position.y = -0.18; rShoulder.castShadow = true; rArm.add(rShoulder);
-      const rForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.13, 0.38, 6), suitMat); rForearm.position.set(0, -0.46, 0.03); rForearm.rotation.x = -0.15; rForearm.castShadow = true; rArm.add(rForearm);
-      const rCuff = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.08, 6), whiteMat); rCuff.position.set(0, -0.66, 0.06); rArm.add(rCuff);
-      const rHand = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.18, 0.16), skinMat); rHand.position.set(0, -0.76, 0.07); rHand.castShadow = true; rArm.add(rHand);
-
-      // Head
-      const head = new THREE.Group(); head.position.set(0, 0.82, 0.02); torso.add(head);
-      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.17, 0.16, 6), skinMat); neck.position.y = -0.04; head.add(neck);
-      const headMesh = new THREE.Mesh(new THREE.DodecahedronGeometry(0.44, 0), skinMat); headMesh.scale.set(0.98, 1.05, 0.95); headMesh.position.set(0, 0.32, 0); headMesh.castShadow = true; head.add(headMesh);
-      const hairBack = new THREE.Mesh(new THREE.BoxGeometry(0.90, 0.58, 0.54), hairMat); hairBack.position.set(0, 0.38, -0.22); hairBack.castShadow = true; head.add(hairBack);
-      const lSideburn = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.34, 0.22), hairMat); lSideburn.position.set(-0.44, 0.34, 0.05); head.add(lSideburn);
-      const rSideburn = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.34, 0.22), hairMat); rSideburn.position.set(0.44, 0.34, 0.05); head.add(rSideburn);
-      const lEar = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.18, 0.14), skinMat); lEar.position.set(-0.48, 0.32, -0.04); lEar.rotation.y = 0.2; head.add(lEar);
-      const rEar = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.18, 0.14), skinMat); rEar.position.set(0.48, 0.32, -0.04); rEar.rotation.y = -0.2; head.add(rEar);
-      const nose = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.10, 0.14), skinMat); nose.position.set(0, 0.30, 0.43); head.add(nose);
-      const lBrow = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.08, 0.08), hairMat); lBrow.position.set(-0.17, 0.48, 0.42); lBrow.rotation.z = -0.08; head.add(lBrow);
-      const rBrow = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.08, 0.08), hairMat); rBrow.position.set(0.17, 0.48, 0.42); rBrow.rotation.z = 0.08; head.add(rBrow);
-      const lEye = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.11, 0.04), eyeMat); lEye.position.set(-0.16, 0.38, 0.43); head.add(lEye);
-      const rEye = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.11, 0.04), eyeMat); rEye.position.set(0.16, 0.38, 0.43); head.add(rEye);
-      const lPupil = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.02), whiteMat); lPupil.position.set(-0.14, 0.40, 0.45); head.add(lPupil);
-      const rPupil = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.02), whiteMat); rPupil.position.set(0.18, 0.40, 0.45); head.add(rPupil);
-      const mustacheCenter = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.12, 0.12), hairMat); mustacheCenter.position.set(0, 0.21, 0.45); head.add(mustacheCenter);
-      const mustacheL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, 0.12), hairMat); mustacheL.position.set(-0.18, 0.18, 0.43); mustacheL.rotation.z = -0.32; head.add(mustacheL);
-      const mustacheR = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, 0.12), hairMat); mustacheR.position.set(0.18, 0.18, 0.43); mustacheR.rotation.z = 0.32; head.add(mustacheR);
-      const capBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.50, 0.54, 0.28, 8), suitMat); capBrim.position.set(0, 0.58, 0.02); capBrim.castShadow = true; head.add(capBrim);
-      const capCrown = new THREE.Mesh(new THREE.DodecahedronGeometry(0.52, 1), suitMat); capCrown.scale.set(1.04, 0.75, 1.05); capCrown.position.set(0, 0.70, 0.02); capCrown.castShadow = true; head.add(capCrown);
-      const capVisor = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.06, 0.36), suitMat); capVisor.position.set(0, 0.50, 0.38); capVisor.rotation.x = 0.18; capVisor.castShadow = true; head.add(capVisor);
-      const capBadge = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.04, 8), whiteMat); capBadge.rotation.x = Math.PI / 2; capBadge.position.set(0, 0.66, 0.48); head.add(capBadge);
-      const mBar1 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.14, 0.02), suitMat); mBar1.position.set(-0.06, 0.66, 0.505); head.add(mBar1);
-      const mBar2 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.14, 0.02), suitMat); mBar2.position.set(0.06, 0.66, 0.505); head.add(mBar2);
-      const mAngleL = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.09, 0.02), suitMat); mAngleL.position.set(-0.025, 0.67, 0.505); mAngleL.rotation.z = -0.55; head.add(mAngleL);
-      const mAngleR = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.09, 0.02), suitMat); mAngleR.position.set(0.025, 0.67, 0.505); mAngleR.rotation.z = 0.55; head.add(mAngleR);
-
-      // Pants & Boots
-      const lLeg = new THREE.Group(); lLeg.position.set(-0.24, 0.75, 0); charGroup.add(lLeg);
-      const lPant = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.14, 0.48, 6), suitMat); lPant.position.y = -0.16; lPant.castShadow = true; lLeg.add(lPant);
-      const lBootCuff = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.17, 0.32, 6), bootMat); lBootCuff.position.y = -0.42; lBootCuff.castShadow = true; lLeg.add(lBootCuff);
-      const lBootFoot = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.24, 0.38), bootMat); lBootFoot.position.set(0, -0.62, 0.08); lBootFoot.castShadow = true; lLeg.add(lBootFoot);
-
-      const rLeg = new THREE.Group(); rLeg.position.set(0.24, 0.75, 0); charGroup.add(rLeg);
-      const rPant = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.14, 0.48, 6), suitMat); rPant.position.y = -0.16; rPant.castShadow = true; rLeg.add(rPant);
-      const rBootCuff = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.17, 0.32, 6), bootMat); rBootCuff.position.y = -0.42; rBootCuff.castShadow = true; rLeg.add(rBootCuff);
-      const rBootFoot = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.24, 0.38), bootMat); rBootFoot.position.set(0, -0.62, 0.08); rBootFoot.castShadow = true; rLeg.add(rBootFoot);
-
-      return { root: charGroup, torso, head, lArm, rArm, lLeg, rLeg };
-    }
-
-    const localCharParts = buildCharacterMesh(0x1976d2);
-    const player = localCharParts.root;
-    const spawnPos = new THREE.Vector3(0, -9.0, Math.sqrt(planetRadius * planetRadius - 81)).normalize().multiplyScalar(planetRadius);
-    player.position.copy(spawnPos); scene.add(player);
-
-    const initNormal = player.position.clone().normalize();
-    const initForward = new THREE.Vector3(0, 1, 0).projectOnPlane(initNormal).normalize();
-    const initRight = new THREE.Vector3().crossVectors(initNormal, initForward).normalize();
-    player.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(initRight, initNormal, initForward));
-
-    const camDist = 22; const camHeight = 15;
-    let currentTrailDir = initForward.clone().negate();
-    camera.position.copy(player.position).add(currentTrailDir.clone().multiplyScalar(camDist)).add(initNormal.clone().multiplyScalar(camHeight));
-    camera.up.copy(initNormal); camera.lookAt(player.position.clone().add(initNormal.clone().multiplyScalar(2.6)));
-
-    // --- GLOWING QUEST BEACON ---
-    beaconGroup = new THREE.Group();
-    const beaconCore = new THREE.Mesh(new THREE.OctahedronGeometry(2.0, 0), new THREE.MeshBasicMaterial({ color: 0xffffff })); beaconGroup.add(beaconCore);
-    beaconAura = new THREE.Mesh(new THREE.OctahedronGeometry(2.8, 0), new THREE.MeshBasicMaterial({ color: 0xffea00, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false })); beaconGroup.add(beaconAura);
-    beaconLight = new THREE.PointLight(0xffea00, 2.5, 30); beaconGroup.add(beaconLight);
-    questHighlightMaterial = new THREE.LineBasicMaterial({ color: 0xffea00, linewidth: 3, transparent: true, opacity: 1.0 });
-
-    // --- GAME FLOW LOGIC ---
-    function openGradeModal() {
-      document.getElementById('start-modal').style.display = 'flex';
-      document.getElementById('cancel-grade-btn').style.display = (gameState === 'start') ? 'none' : 'block';
-      document.getElementById('grade-hint').style.display = (gameState === 'start') ? 'block' : 'none';
-    }
-
-    function closeGradeModal() {
-      document.getElementById('start-modal').style.display = 'none';
-      window.focus(); renderer.domElement.focus();
-    }
-
-    function selectGrade(g) {
-      playerGrade = g;
-      document.getElementById('grade-btn-hud').innerText = "GRADE " + g;
-      document.getElementById('start-modal').style.display = 'none';
-      
-      if (gameState === 'start') {
-        document.getElementById('hud-room').innerText = "SOLO";
-        document.getElementById('hud-players').innerText = "1";
-        document.getElementById('inst-text').innerText = `Math Curriculum Active (Grade ${g}) • W A S D to Move`;
-        gameState = 'playing'; clock.start();
-        setTimeout(assignNewQuest, 1500);
-      } else {
-        document.getElementById('inst-text').innerText = `Curriculum Changed to Grade ${g}`;
-      }
-      
-      window.focus(); renderer.domElement.focus();
-    }
-
-    // --- MULTIPLAYER MODAL & PEERJS SETUP ---
-    function openMultiplayerModal() {
-      document.getElementById('mp-modal').style.display = 'flex';
-      document.getElementById('mp-choose-view').style.display = 'block';
-      document.getElementById('mp-host-view').style.display = 'none';
-      document.getElementById('mp-join-view').style.display = 'none';
-    }
-
-    function closeMultiplayerModal() {
-      document.getElementById('mp-modal').style.display = 'none';
-      window.focus(); renderer.domElement.focus();
-    }
-
-    function backToMpChoose() {
-      document.getElementById('mp-join-view').style.display = 'none';
-      document.getElementById('mp-host-view').style.display = 'none';
-      document.getElementById('mp-choose-view').style.display = 'block';
-    }
-
-    function generateRoomCode() { 
-      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let code = ""; 
-      for (let i = 0; i < 4; i++) code += chars.charAt(Math.floor(Math.random() * chars.length)); 
-      return code; 
-    }
-
-    function showHostUI() {
-      document.getElementById('mp-choose-view').style.display = 'none';
-      document.getElementById('mp-host-view').style.display = 'block';
-      document.getElementById('host-status').innerText = "Connecting to matchmaking server...";
-      
-      currentRoomCode = generateRoomCode();
-      const hostPeerId = "mathmetropolis-" + currentRoomCode.toLowerCase();
-      document.getElementById('host-code-display').innerText = currentRoomCode;
-
-      if (myPeer) { try { myPeer.destroy(); } catch(e){} }
-      myPeer = new Peer(hostPeerId, peerConfig); isHost = true; isMultiplayer = true;
-      document.getElementById('hud-room').innerText = currentRoomCode;
-
-      myPeer.on('open', (id) => { 
-        document.getElementById('host-status').innerText = "Host Ready! Share the code with others.";
-        document.getElementById('inst-text').innerText = `Hosting Room: ${currentRoomCode}`;
-        startNetworkBroadcastLoop();
-      });
-
-      myPeer.on('connection', (conn) => { handleIncomingConnection(conn); });
-      myPeer.on('error', (err) => { 
-        if (err.type === 'unavailable-id') showHostUI(); 
-        else document.getElementById('host-status').innerText = "Network error. Please try again.";
-      });
-    }
-
-    function showJoinUI() { 
-      document.getElementById('mp-choose-view').style.display = 'none'; 
-      document.getElementById('mp-join-view').style.display = 'block'; 
-      document.getElementById('join-status').innerText = ""; 
-    }
-
-    function joinRoom() {
-      const rawCode = document.getElementById('join-code-input').value.trim().toUpperCase();
-      if (rawCode.length < 4) { document.getElementById('join-status').innerText = "Please enter a 4-character code."; return; }
-      document.getElementById('join-status').innerText = "Connecting to room...";
-      currentRoomCode = rawCode; const targetHostId = "mathmetropolis-" + rawCode.toLowerCase();
-
-      if (myPeer) { try { myPeer.destroy(); } catch(e){} }
-      myPeer = new Peer(peerConfig); isHost = false; isMultiplayer = true;
-      
-      myPeer.on('open', () => {
-        hostConnection = myPeer.connect(targetHostId, { reliable: true });
-        const setupHostConn = () => {
-          document.getElementById('mp-modal').style.display = 'none'; 
-          document.getElementById('hud-room').innerText = currentRoomCode;
-          document.getElementById('inst-text').innerText = `Connected to Room ${currentRoomCode}!`;
-          window.focus(); renderer.domElement.focus();
-          startNetworkBroadcastLoop();
-        };
-
-        if (hostConnection.open) setupHostConn();
-        else hostConnection.on('open', setupHostConn);
-
-        hostConnection.on('data', (data) => { handleNetworkMessage(data); });
-        hostConnection.on('close', () => { document.getElementById('inst-text').innerText = "Host closed session."; });
-        hostConnection.on('error', (err) => { document.getElementById('join-status').innerText = "Connection error. Check code & retry."; });
-      });
-
-      myPeer.on('error', (err) => { document.getElementById('join-status').innerText = "Could not reach host. Verify code."; });
-    }
-
-    function handleIncomingConnection(conn) {
-      clientConnections[conn.peer] = conn; updatePlayerCountHUD();
-      const sendInitState = () => {
-        conn.send({ type: 'init_sync', grade: playerGrade, score: correctAnswersCount, questIndex: questTargetIndex });
+  // 1. Initialize camera immediately on load
+  window.onload = async () => {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+      cameraFeed.srcObject = stream;
+      cameraFeed.onloadedmetadata = () => {
+        previewCanvas.width = cameraFeed.videoWidth;
+        previewCanvas.height = cameraFeed.videoHeight;
       };
-
-      if (conn.open) sendInitState(); else conn.on('open', sendInitState);
-
-      conn.on('data', (data) => {
-        handleNetworkMessage(data, conn.peer);
-        for (let otherId in clientConnections) { 
-          if (otherId !== conn.peer && clientConnections[otherId].open) clientConnections[otherId].send(data); 
-        }
-      });
-
-      conn.on('close', () => { removeRemotePlayer(conn.peer); delete clientConnections[conn.peer]; updatePlayerCountHUD(); });
+    } catch (err) {
+      console.error("Camera error:", err);
+      errorMsg.style.display = 'block';
     }
+  };
 
-    function updatePlayerCountHUD() { document.getElementById('hud-players').innerText = String(Object.keys(clientConnections).length + 1); }
+  // 2. Capture Frame
+  captureBtn.addEventListener('click', () => {
+    const offscreenCanvas = document.createElement('canvas');
+    offscreenCanvas.width = previewCanvas.width;
+    offscreenCanvas.height = previewCanvas.height;
+    offscreenCanvas.getContext('2d').drawImage(cameraFeed, 0, 0);
+    
+    const dataUrl = offscreenCanvas.toDataURL('image/jpeg');
+    frames.push(dataUrl);
+    updateTimeline();
+    updateOnionSkin();
+    saveBtn.disabled = false;
+  });
 
-    function createRemotePlayer(peerId) {
-      const colorIndex = (Object.keys(remotePlayers).length + 1) % suitColorPalette.length;
-      const color = suitColorPalette[colorIndex];
-      const char = buildCharacterMesh(color);
-      scene.add(char.root);
-      remotePlayers[peerId] = { parts: char, targetPos: new THREE.Vector3(), targetQuat: new THREE.Quaternion(), walkCycle: 0 };
-      return remotePlayers[peerId];
+  function updateTimeline() {
+    timeline.innerHTML = '';
+    frames.forEach((src) => {
+      const img = document.createElement('img');
+      img.src = src;
+      img.className = 'frame-thumb';
+      timeline.appendChild(img);
+    });
+    timeline.scrollLeft = timeline.scrollWidth;
+  }
+
+  function updateOnionSkin() {
+    ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+    if (onionSkinToggle.checked && frames.length > 0 && !isPlaying) {
+      const img = new Image();
+      img.onload = () => {
+        ctx.globalAlpha = 0.4;
+        ctx.drawImage(img, 0, 0);
+        ctx.globalAlpha = 1.0;
+      };
+      img.src = frames[frames.length - 1];
     }
+  }
 
-    function removeRemotePlayer(peerId) {
-      if (remotePlayers[peerId]) { scene.remove(remotePlayers[peerId].parts.root); delete remotePlayers[peerId]; }
+  onionSkinToggle.addEventListener('change', updateOnionSkin);
+
+  // 3. Play / Stop Toggle Logic
+  playStopBtn.addEventListener('click', () => {
+    if (frames.length === 0) return;
+    
+    if (isPlaying) {
+      stopPlayback();
+    } else {
+      startPlayback();
     }
+  });
 
-    function handleNetworkMessage(data) {
-      if (data.type === 'player_transform') {
-        const id = data.peerId; if (!id) return;
-        if (!remotePlayers[id]) createRemotePlayer(id);
-        const rp = remotePlayers[id]; rp.targetPos.set(data.x, data.y, data.z); rp.targetQuat.set(data.qx, data.qy, data.qz, data.qw); rp.walkCycle = data.walkCycle;
-      } else if (data.type === 'init_sync') {
-        playerGrade = data.grade; correctAnswersCount = data.score; 
-        document.getElementById('grade-btn-hud').innerText = "GRADE " + playerGrade;
-        document.getElementById('hud-score').innerText = String(correctAnswersCount);
-        if (data.questIndex >= 0) syncQuestBuilding(data.questIndex);
-      } else if (data.type === 'quest_assign') {
-        syncQuestBuilding(data.index);
-        if (gameState === 'cooldown') { gameState = 'playing'; document.getElementById('inst-text').innerHTML = `New Quest Active! (Grade ${playerGrade})`; }
-      } else if (data.type === 'quest_flag') {
-        placeNetworkFlag(data.buildingIndex, data.success, data.grade); 
-        if (isHost) startQuestCooldown();
-      }
-    }
-
-    function syncQuestBuilding(idx) {
-      if (questHighlightGroup && buildings[questTargetIndex]) { 
-        buildings[questTargetIndex].group.remove(beaconGroup); buildings[questTargetIndex].group.remove(questHighlightGroup); 
-      }
-      questTargetIndex = idx;
-      if (buildings[questTargetIndex]) {
-        const target = buildings[questTargetIndex]; beaconGroup.position.set(0, target.topY + 6, 0); target.group.add(beaconGroup);
-        questHighlightGroup = new THREE.Group();
-        target.group.traverse((child) => {
-          if (child.isMesh && child !== beaconCore && child !== beaconAura) {
-            const edges = new THREE.EdgesGeometry(child.geometry, 25); const oAmt = 0.035; 
-            const thickOffsets = [ new THREE.Vector3(0,0,0), new THREE.Vector3(oAmt,0,0), new THREE.Vector3(-oAmt,0,0), new THREE.Vector3(0,oAmt,0), new THREE.Vector3(0,-oAmt,0), new THREE.Vector3(0,0,oAmt), new THREE.Vector3(0,0,-oAmt) ];
-            thickOffsets.forEach(offset => {
-              const line = new THREE.LineSegments(edges, questHighlightMaterial);
-              line.position.copy(child.position).add(offset); line.rotation.copy(child.rotation); line.scale.copy(child.scale); questHighlightGroup.add(line);
-            });
-          }
-        });
-        target.group.add(questHighlightGroup);
-      }
-    }
-
-    // --- CANVAS TEXTURE FLAG GENERATOR ---
-    function createFlag(colorHex, gradeText) {
-      const flagGroup = new THREE.Group();
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 4.2, 6), getMat(0x90a4ae)); 
-      pole.position.y = 1.6; pole.castShadow = true;
+  function startPlayback() {
+    isPlaying = true;
+    playStopBtn.textContent = 'Stop';
+    playStopBtn.className = 'btn-red';
+    
+    // Hide camera while playing, show animation on canvas
+    ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+    cameraFeed.style.opacity = '0';
+    
+    const fps = parseInt(fpsInput.value) || 5;
+    const interval = 1000 / fps;
+    
+    playInterval = setInterval(() => {
+      const img = new Image();
+      img.onload = () => {
+        ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+        ctx.drawImage(img, 0, 0);
+      };
+      img.src = frames[currentPlayIndex];
       
-      const canvas = document.createElement('canvas');
-      canvas.width = 256; canvas.height = 128;
-      const ctx = canvas.getContext('2d');
-      
-      const colorStr = '#' + colorHex.toString(16).padStart(6, '0');
-      ctx.fillStyle = colorStr;
-      ctx.fillRect(0, 0, 256, 128);
-      
-      if (gradeText) {
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 70px "Segoe UI", Tahoma, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.shadowColor = 'rgba(0,0,0,0.4)';
-        ctx.shadowBlur = 6;
-        ctx.fillText('G' + gradeText, 128, 64);
+      currentPlayIndex++;
+      if (currentPlayIndex >= frames.length) {
+        currentPlayIndex = 0; // Loop animation
       }
+    }, interval);
+  }
+
+  function stopPlayback() {
+    isPlaying = false;
+    clearInterval(playInterval);
+    currentPlayIndex = 0;
+    
+    playStopBtn.textContent = 'Play';
+    playStopBtn.className = 'btn-blue';
+    
+    cameraFeed.style.opacity = '1';
+    updateOnionSkin();
+  }
+
+  // 4. Clear Timeline
+  clearBtn.addEventListener('click', () => {
+    if (confirm("Are you sure you want to delete all frames?")) {
+      frames = [];
+      updateTimeline();
+      updateOnionSkin();
+      saveBtn.disabled = true;
+      if (isPlaying) stopPlayback();
+    }
+  });
+
+  // 5. Save Video 
+  saveBtn.addEventListener('click', () => {
+    if (frames.length === 0) return;
+    
+    const recCanvas = document.createElement('canvas');
+    recCanvas.width = previewCanvas.width;
+    recCanvas.height = previewCanvas.height;
+    const recCtx = recCanvas.getContext('2d');
+    
+    const fps = parseInt(fpsInput.value) || 5;
+    const recStream = recCanvas.captureStream(fps);
+    const mediaRecorder = new MediaRecorder(recStream, { mimeType: 'video/webm' });
+    const chunks = [];
+    
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(chunks, { type: 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'stomo_video.webm'; // Downloads as webm/mp4 compatible format
+      a.click();
+      URL.revokeObjectURL(url);
       
-      const tex = new THREE.CanvasTexture(canvas);
-      tex.minFilter = THREE.LinearFilter; 
-      
-      const fabricMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 });
-      const fabric = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.0, 0.08), fabricMat); 
-      fabric.position.set(0.75, 3.1, 0); fabric.castShadow = true;
-      
-      flagGroup.add(pole, fabric); 
-      return flagGroup;
-    }
-
-    function placeNetworkFlag(idx, success, grade) {
-      if (buildings[idx]) {
-        const target = buildings[idx];
-        target.group.remove(beaconGroup);
-        if (questHighlightGroup) { target.group.remove(questHighlightGroup); questHighlightGroup = null; }
-        
-        const flag = createFlag(success ? 0x00e676 : 0xd32f2f, grade);
-        flag.position.set(target.radius * 0.85, 0, target.radius * 0.85);
-        target.group.add(flag); target.completed = true;
-
-        if (success) {
-          correctAnswersCount++; 
-          document.getElementById('hud-score').innerText = String(correctAnswersCount);
-          document.getElementById('inst-text').innerText = "Teammate solved the quest! Grade " + grade + " flag raised!";
-          if (correctAnswersCount % 10 === 0) triggerFireworks();
-        }
-        if (gameState === 'prompt' && questTargetIndex === idx) {
-          document.getElementById('quest-modal').style.display = 'none'; gameState = 'cooldown'; interactInRange = false;
-        }
-      }
-    }
-
-    function startNetworkBroadcastLoop() {
-      if (networkBroadcastTimer) clearInterval(networkBroadcastTimer);
-      networkBroadcastTimer = setInterval(() => {
-        if (!isMultiplayer || !myPeer || !myPeer.id) return;
-        const msg = { 
-          type: 'player_transform', peerId: myPeer.id, 
-          x: player.position.x, y: player.position.y, z: player.position.z, 
-          qx: player.quaternion.x, qy: player.quaternion.y, qz: player.quaternion.z, qw: player.quaternion.w, 
-          walkCycle: walkCycle 
-        };
-        if (isHost) { 
-          for (let id in clientConnections) { if (clientConnections[id].open) clientConnections[id].send(msg); } 
-        } else if (hostConnection && hostConnection.open) { 
-          hostConnection.send(msg); 
-        }
-      }, 50);
-    }
-
-    function broadcastQuestAssign(index) {
-      if (!isMultiplayer) return;
-      const msg = { type: 'quest_assign', index: index };
-      if (isHost) { for (let id in clientConnections) { if (clientConnections[id].open) clientConnections[id].send(msg); } }
-    }
-
-    function broadcastQuestFlag(buildingIndex, success, grade) {
-      if (!isMultiplayer) return;
-      const msg = { type: 'quest_flag', buildingIndex: buildingIndex, success: success, grade: grade };
-      if (isHost) { for (let id in clientConnections) { if (clientConnections[id].open) clientConnections[id].send(msg); } } 
-      else if (hostConnection && hostConnection.open) { hostConnection.send(msg); }
-    }
-
-    function continueGame() { document.getElementById('milestone-modal').style.display = 'none'; startQuestCooldown(); }
-    function stopGame() {
-      document.getElementById('milestone-modal').style.display = 'none'; gameState = 'explore'; document.getElementById('inst-text').innerText = "Explore Mode (No Quests)";
-      if (beaconGroup.parent) beaconGroup.parent.remove(beaconGroup);
-      if (questHighlightGroup && questHighlightGroup.parent) questHighlightGroup.parent.remove(questHighlightGroup);
-    }
-
-    function startQuestCooldown() {
-      if (gameState === 'explore') return;
-      gameState = 'cooldown'; questTargetIndex = -1;
-      if (!isMultiplayer || isHost) setTimeout(assignNewQuest, Math.floor(10000 + Math.random() * 10000));
-    }
-
-    function assignNewQuest() {
-      if (gameState !== 'cooldown' && gameState !== 'playing') return;
-      if (availableQuests.length === 0) { document.getElementById('inst-text').innerText = "All City Quests Completed!"; return; }
-      
-      const poolIndex = Math.floor(Math.random() * availableQuests.length);
-      questTargetIndex = availableQuests[poolIndex]; availableQuests.splice(poolIndex, 1);
-      syncQuestBuilding(questTargetIndex); broadcastQuestAssign(questTargetIndex);
-      gameState = 'playing'; document.getElementById('inst-text').innerHTML = `New Quest Active! (Grade ${playerGrade})`;
-    }
-
-    function triggerQuestPrompt() {
-      if (gameState !== 'playing' || !interactInRange) return;
-      gameState = 'prompt'; document.getElementById('interact-btn').style.display = 'none';
-      const qData = generateMathQuestion(playerGrade);
-      document.getElementById('quest-question').innerText = qData.q;
-      for (let i = 0; i < 3; i++) {
-        let btn = document.getElementById(`ans-${i}`); btn.innerText = qData.a[i];
-        btn.onclick = () => { processAnswer(i === qData.correct); };
-      }
-      document.getElementById('quest-modal').style.display = 'flex';
-    }
-
-    function processAnswer(success) {
-      document.getElementById('quest-modal').style.display = 'none';
-      keys.w = keys.a = keys.s = keys.d = keys.ArrowUp = keys.ArrowDown = keys.ArrowLeft = keys.ArrowRight = keys[' '] = false; joyX = 0; joyY = 0;
-
-      const target = buildings[questTargetIndex];
-      if (target) {
-        target.group.remove(beaconGroup);
-        if (questHighlightGroup) { target.group.remove(questHighlightGroup); questHighlightGroup.traverse(c => { if (c.geometry) c.geometry.dispose(); }); questHighlightGroup = null; }
-        
-        const flag = createFlag(success ? 0x00e676 : 0xd32f2f, playerGrade); 
-        flag.position.set(target.radius * 0.85, 0, target.radius * 0.85);
-        target.group.add(flag); target.completed = true; 
-      }
-
-      broadcastQuestFlag(questTargetIndex, success, playerGrade); 
-      interactInRange = false;
-      
-      if (success) {
-        correctAnswersCount++; document.getElementById('hud-score').innerText = String(correctAnswersCount); 
-        document.getElementById('inst-text').innerText = `Correct! Grade ${playerGrade} flag raised!`;
-        if (correctAnswersCount > 0 && correctAnswersCount % 10 === 0) {
-          triggerFireworks(); gameState = 'milestone'; setTimeout(() => { document.getElementById('milestone-modal').style.display = 'flex'; }, 1500);
-        } else { startQuestCooldown(); }
-      } else { 
-        document.getElementById('inst-text').innerText = `Incorrect! Grade ${playerGrade} Red Flag raised.`; 
-        startQuestCooldown(); 
-      }
-      
-      window.focus(); renderer.domElement.focus();
-    }
-
-    // --- BULLETPROOF KEYBOARD INPUT HANDLING ---
-    const handleKeyDown = (e) => {
-      const k = e.key ? e.key.toLowerCase() : '';
-      const c = e.code || '';
-      if (k === 'w' || c === 'KeyW' || k === 'arrowup' || c === 'ArrowUp') keys.w = true;
-      if (k === 's' || c === 'KeyS' || k === 'arrowdown' || c === 'ArrowDown') keys.s = true;
-      if (k === 'a' || c === 'KeyA' || k === 'arrowleft' || c === 'ArrowLeft') keys.a = true;
-      if (k === 'd' || c === 'KeyD' || k === 'arrowright' || c === 'ArrowRight') keys.d = true;
-
-      if (k === ' ' || c === 'Space') { 
-        e.preventDefault(); 
-        if (isGrounded && gameState !== 'prompt' && gameState !== 'start') { radialVelocity = jumpStrength; isGrounded = false; } 
-      }
-      if (k === 'r' || c === 'KeyR') triggerQuestPrompt();
+      saveBtn.textContent = 'Save Video';
+      saveBtn.disabled = false;
     };
-
-    const handleKeyUp = (e) => {
-      const k = e.key ? e.key.toLowerCase() : '';
-      const c = e.code || '';
-      if (k === 'w' || c === 'KeyW' || k === 'arrowup' || c === 'ArrowUp') keys.w = false;
-      if (k === 's' || c === 'KeyS' || k === 'arrowdown' || c === 'ArrowDown') keys.s = false;
-      if (k === 'a' || c === 'KeyA' || k === 'arrowleft' || c === 'ArrowLeft') keys.a = false;
-      if (k === 'd' || c === 'KeyD' || k === 'arrowright' || c === 'ArrowRight') keys.d = false;
+    
+    saveBtn.textContent = 'Saving...';
+    saveBtn.disabled = true;
+    mediaRecorder.start();
+    
+    let frameIdx = 0;
+    const renderFrame = () => {
+      if (frameIdx >= frames.length) {
+        mediaRecorder.stop();
+        return;
+      }
+      const img = new Image();
+      img.onload = () => {
+        recCtx.clearRect(0, 0, recCanvas.width, recCanvas.height);
+        recCtx.drawImage(img, 0, 0);
+        frameIdx++;
+        setTimeout(renderFrame, 1000 / fps);
+      };
+      img.src = frames[frameIdx];
     };
-
-    window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp);
-    document.addEventListener('keydown', handleKeyDown); document.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('click', () => { window.focus(); renderer.domElement.focus(); });
-    window.addEventListener('pointerdown', () => { window.focus(); renderer.domElement.focus(); });
-
-    // Mobile Virtual Joystick
-    const joystickZone = document.getElementById('joystick-zone'); const joystickKnob = document.getElementById('joystick-knob');
-    const jumpBtn = document.getElementById('jump-btn'); const interactBtn = document.getElementById('interact-btn');
-    let center = { x: 0, y: 0 }; const maxDist = 40;
-
-    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) { joystickZone.style.display = 'block'; jumpBtn.style.display = 'flex'; }
-
-    joystickZone.addEventListener('touchstart', (e) => {
-      isDragging = true; center = { x: joystickZone.getBoundingClientRect().left + 55, y: joystickZone.getBoundingClientRect().top + 55 };
-      joystickKnob.style.transition = 'none'; updateJoystick(e.touches[0]);
-    }, {passive: false});
-    joystickZone.addEventListener('touchmove', (e) => { if (isDragging) updateJoystick(e.touches[0]); }, {passive: false});
-    joystickZone.addEventListener('touchend', () => {
-      isDragging = false; joyX = 0; joyY = 0; joystickKnob.style.transition = 'transform 0.15s ease-out'; joystickKnob.style.transform = `translate(0px, 0px)`;
-    }, {passive: false});
-
-    jumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); if (isGrounded && gameState !== 'prompt' && gameState !== 'start') { radialVelocity = jumpStrength; isGrounded = false; } }, {passive: false});
-    interactBtn.addEventListener('touchstart', (e) => { e.preventDefault(); triggerQuestPrompt(); }, {passive: false});
-
-    function updateJoystick(touch) {
-      let dx = touch.clientX - center.x; let dy = touch.clientY - center.y;
-      let dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist > maxDist) { dx = (dx / dist) * maxDist; dy = (dy / dist) * maxDist; }
-      joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`; joyX = dx / maxDist; joyY = dy / maxDist;
-    }
-
-    // --- ACCURATE DIRECTION COMPASS ---
-    const compCanvas = document.getElementById('compassCanvas'); const compCtx = compCanvas.getContext('2d');
-    function resizeCanvas() {
-      compCanvas.width = window.innerWidth; compCanvas.height = 46;
-      camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); 
-    }
-    window.addEventListener('resize', resizeCanvas); resizeCanvas();
-
-    function updateDirectionCompass(questRelAngleDeg, questDistMeters, cumulativeYawDeg) {
-      const W = compCanvas.width; compCtx.clearRect(0, 0, W, 46);
-      compCtx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; compCtx.lineWidth = 1;
-      compCtx.beginPath(); compCtx.moveTo(0, 24); compCtx.lineTo(W, 24); compCtx.stroke();
-      
-      const pxPerDeg = (W * 0.44) / 80; const tickSpacingDeg = 10; const centerX = W / 2;
-      
-      let centerDeg = cumulativeYawDeg;
-      let startDeg = Math.floor((centerDeg - 90) / tickSpacingDeg) * tickSpacingDeg;
-      let endDeg = Math.ceil((centerDeg + 90) / tickSpacingDeg) * tickSpacingDeg;
-
-      for (let deg = startDeg; deg <= endDeg; deg += tickSpacingDeg) {
-        let offsetDeg = deg - centerDeg; let drawX = centerX + offsetDeg * pxPerDeg;
-        let isMajor = (deg % 30 === 0);
-        
-        compCtx.strokeStyle = isMajor ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.28)';
-        compCtx.lineWidth = isMajor ? 1.5 : 1;
-        compCtx.beginPath(); compCtx.moveTo(drawX, isMajor ? 14 : 19); compCtx.lineTo(drawX, 24); compCtx.stroke();
-      }
-      compCtx.fillStyle = '#ff3d00'; compCtx.font = 'bold 10px sans-serif'; compCtx.textAlign = 'center'; compCtx.fillText('FORWARD', W / 2, 36);
-
-      if (questRelAngleDeg !== null && gameState === 'playing') {
-        compCtx.save();
-        if (Math.abs(questRelAngleDeg) <= 75) {
-          const qX = centerX + questRelAngleDeg * pxPerDeg;
-          compCtx.fillStyle = '#ffea00'; compCtx.shadowColor = '#ffea00'; compCtx.shadowBlur = 8;
-          compCtx.beginPath(); compCtx.moveTo(qX, 7); compCtx.lineTo(qX + 6, 14); compCtx.lineTo(qX, 21); compCtx.lineTo(qX - 6, 14); compCtx.fill();
-          compCtx.beginPath(); compCtx.moveTo(qX - 3.5, 24); compCtx.lineTo(qX + 3.5, 24); compCtx.lineTo(qX, 30); compCtx.fill();
-          compCtx.font = 'bold 11px sans-serif'; compCtx.fillText(`${questDistMeters}m`, qX, 42);
-        } else {
-          const isRight = questRelAngleDeg > 0; const aX = isRight ? W - 38 : 38; const dir = isRight ? 1 : -1;
-          compCtx.fillStyle = '#ffea00'; compCtx.shadowColor = '#ffea00'; compCtx.shadowBlur = 8;
-          compCtx.beginPath(); compCtx.moveTo(aX - dir * 8, 11); compCtx.lineTo(aX + dir * 6, 18); compCtx.lineTo(aX - dir * 8, 25); compCtx.fill();
-          compCtx.beginPath(); compCtx.arc(aX - dir * 10, 18, 3, 0, Math.PI * 2); compCtx.fill();
-          compCtx.textAlign = isRight ? 'right' : 'left'; compCtx.fillText(`${questDistMeters}m`, isRight ? W - 58 : 58, 22);
-        }
-        compCtx.restore();
-      }
-    }
-
-    // --- MAIN ENGINE ANIMATION LOOP ---
-    function animate() {
-      requestAnimationFrame(animate);
-      if (gameState === 'start') { renderer.render(scene, camera); return; }
-
-      if (fireworksActive) {
-        fwTimer++; const pos = fwGeo.attributes.position.array;
-        for (let i = 0; i < 500; i++) { pos[i * 3] += fwVel[i].x; pos[i * 3 + 1] += fwVel[i].y; pos[i * 3 + 2] += fwVel[i].z; fwVel[i].y -= 0.04; }
-        fwGeo.attributes.position.needsUpdate = true;
-        fwMat.opacity = Math.max(0, 1 - fwTimer / 120);
-        if (fwTimer > 120) { fireworksActive = false; fireworksSystem.visible = false; }
-      }
-
-      if (gameState === 'playing' && beaconGroup) {
-        beaconGroup.rotation.y += 0.025;
-        beaconAura.scale.set(1 + Math.sin(Date.now() * 0.006) * 0.15, 1 + Math.sin(Date.now() * 0.006) * 0.15, 1 + Math.sin(Date.now() * 0.006) * 0.15);
-        if (questHighlightMaterial) questHighlightMaterial.opacity = 0.5 + Math.sin(Date.now() * 0.007) * 0.5;
-      }
-
-      for (let id in remotePlayers) {
-        const rp = remotePlayers[id];
-        rp.parts.root.position.lerp(rp.targetPos, 0.2); rp.parts.root.quaternion.slerp(rp.targetQuat, 0.2);
-        rp.parts.lArm.rotation.x = Math.sin(rp.walkCycle) * 0.75; rp.parts.rArm.rotation.x = -Math.sin(rp.walkCycle) * 0.75;
-        rp.parts.lLeg.rotation.x = -Math.sin(rp.walkCycle) * 0.65; rp.parts.rLeg.rotation.x = Math.sin(rp.walkCycle) * 0.65;
-        rp.parts.lLeg.position.y = 0.75 + Math.max(0, -Math.sin(rp.walkCycle) * 0.15); rp.parts.rLeg.position.y = 0.75 + Math.max(0, Math.sin(rp.walkCycle) * 0.15);
-        rp.parts.torso.position.y = 0.85 + Math.abs(Math.sin(rp.walkCycle * 2)) * 0.08;
-      }
-
-      let mX = 0, mZ = 0;
-      if (gameState === 'playing' || gameState === 'cooldown' || gameState === 'explore') {
-        if (keys.w || keys.ArrowUp) mZ -= 1; if (keys.s || keys.ArrowDown) mZ += 1;
-        if (keys.a || keys.ArrowLeft) mX -= 1; if (keys.d || keys.ArrowRight) mX += 1;
-        if (joyX !== 0 || joyY !== 0) { mX = joyX; mZ = joyY; }
-      }
-
-      let pGround = player.position.clone().normalize().multiplyScalar(planetRadius);
-      let pNorm = pGround.clone().normalize();
-      let cFwd = camera.position.clone().sub(pGround).projectOnPlane(pNorm).normalize().negate(); 
-      let cRight = new THREE.Vector3().crossVectors(cFwd, pNorm).normalize();
-      let dMove = new THREE.Vector3();
-      if (mZ !== 0) dMove.add(cFwd.clone().multiplyScalar(-mZ));
-      if (mX !== 0) dMove.add(cRight.clone().multiplyScalar(mX));
-
-      if (dMove.lengthSq() > 0) {
-        dMove.normalize().multiplyScalar(moveSpeed);
-        let tPos = pGround.clone().add(dMove).normalize().multiplyScalar(planetRadius);
-        
-        let col = false;
-        for (let i = 0; i < colliders.length; i++) { if (tPos.distanceTo(colliders[i].pos) < colliders[i].radius + 0.9) { col = true; break; } }
-        
-        if (!col) { pGround.copy(tPos); } else {
-          let sX = pGround.clone().add(cRight.clone().multiplyScalar(mX * moveSpeed)).normalize().multiplyScalar(planetRadius);
-          let sZ = pGround.clone().add(cFwd.clone().multiplyScalar(-mZ * moveSpeed)).normalize().multiplyScalar(planetRadius);
-          let cx = false, cz = false;
-          for (let i = 0; i < colliders.length; i++) {
-            if (sX.distanceTo(colliders[i].pos) < colliders[i].radius + 0.9) cx = true;
-            if (sZ.distanceTo(colliders[i].pos) < colliders[i].radius + 0.9) cz = true;
-          }
-          if (mX !== 0 && !cx) { pGround.copy(sX); dMove = cRight.clone().multiplyScalar(mX * moveSpeed); }
-          else if (mZ !== 0 && !cz) { pGround.copy(sZ); dMove = cFwd.clone().multiplyScalar(-mZ * moveSpeed); }
-          else dMove.set(0, 0, 0);
-        }
-
-        if (dMove.lengthSq() > 0) {
-          let walkNorm = pGround.clone().normalize();
-          const fwd = dMove.clone().normalize();
-          const rgt = new THREE.Vector3().crossVectors(walkNorm, fwd).normalize();
-          player.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(rgt, walkNorm, new THREE.Vector3().crossVectors(rgt, walkNorm).normalize()));
-          currentTrailDir.lerp(fwd.clone().negate(), 0.06).normalize();
-
-          if (isGrounded) {
-            walkCycle += 0.35;
-            localCharParts.lArm.rotation.x = Math.sin(walkCycle) * 0.75; localCharParts.rArm.rotation.x = -Math.sin(walkCycle) * 0.75;
-            localCharParts.lLeg.rotation.x = -Math.sin(walkCycle) * 0.65; localCharParts.rLeg.rotation.x = Math.sin(walkCycle) * 0.65;
-            localCharParts.lLeg.position.y = 0.75 + Math.max(0, -Math.sin(walkCycle) * 0.15); localCharParts.rLeg.position.y = 0.75 + Math.max(0, Math.sin(walkCycle) * 0.15);
-            localCharParts.torso.position.y = 0.85 + Math.abs(Math.sin(walkCycle * 2)) * 0.08; localCharParts.head.rotation.x = Math.sin(walkCycle * 2) * 0.05;
-          }
-        }
-      } 
-
-      if (gameState === 'playing' && questTargetIndex >= 0 && buildings[questTargetIndex]) {
-        const target = buildings[questTargetIndex];
-        if (pGround.distanceTo(target.pos) < target.radius + 10) {
-          if (!interactInRange) { interactInRange = true; document.getElementById('interact-btn').style.display = 'flex'; document.getElementById('inst-text').innerHTML = "Press <b>R</b> or Tap <b>QUEST</b> to answer!"; }
-        } else if (interactInRange) { interactInRange = false; document.getElementById('interact-btn').style.display = 'none'; document.getElementById('inst-text').innerHTML = `Math Curriculum Active (Grade ${playerGrade})`; }
-      }
-
-      if (!isGrounded) {
-        radialVelocity -= gravity; altitude += radialVelocity;
-        localCharParts.lArm.rotation.x = THREE.MathUtils.lerp(localCharParts.lArm.rotation.x, -0.4, 0.2); localCharParts.rArm.rotation.x = THREE.MathUtils.lerp(localCharParts.rArm.rotation.x, -0.4, 0.2);
-        localCharParts.lLeg.rotation.x = THREE.MathUtils.lerp(localCharParts.lLeg.rotation.x, 0.3, 0.2); localCharParts.rLeg.rotation.x = THREE.MathUtils.lerp(localCharParts.rLeg.rotation.x, 0.3, 0.2);
-        if (altitude <= 0) { altitude = 0; radialVelocity = 0; isGrounded = true; }
-      } else if (dMove.lengthSq() === 0) {
-        localCharParts.lArm.rotation.x *= 0.8; localCharParts.rArm.rotation.x *= 0.8; localCharParts.lLeg.rotation.x *= 0.8; localCharParts.rLeg.rotation.x *= 0.8;
-        localCharParts.lLeg.position.y = 0.75; localCharParts.rLeg.position.y = 0.75; localCharParts.torso.position.y = 0.85; localCharParts.head.rotation.x *= 0.8;
-      }
-
-      let finalNorm = pGround.clone().normalize();
-      player.position.copy(pGround).add(finalNorm.clone().multiplyScalar(altitude));
-      camera.position.lerp(pGround.clone().add(currentTrailDir.clone().multiplyScalar(camDist)).add(finalNorm.clone().multiplyScalar(camHeight + altitude * 0.4)), 0.08);
-      camera.up.copy(finalNorm); camera.lookAt(player.position.clone().add(finalNorm.clone().multiplyScalar(2.6)));
-
-      let camFwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
-      let pFwdProj = prevCamForward.projectOnPlane(finalNorm).normalize();
-      let cFwdProj = camFwd.projectOnPlane(finalNorm).normalize();
-      let pRightProj = new THREE.Vector3().crossVectors(pFwdProj, finalNorm).normalize();
-      cumulativeCameraYawDeg += Math.atan2(cFwdProj.dot(pRightProj), cFwdProj.dot(pFwdProj)) * (180 / Math.PI);
-      prevCamForward.copy(camFwd);
-
-      let questRelAngleDeg = null; let questDistMeters = 0;
-      if (gameState === 'playing' && questTargetIndex >= 0 && buildings[questTargetIndex]) {
-        const target = buildings[questTargetIndex];
-        let toTargetFlat = target.pos.clone().sub(pGround).projectOnPlane(finalNorm).normalize();
-        if (toTargetFlat.lengthSq() > 0.0001) {
-          let cRightProj = new THREE.Vector3().crossVectors(cFwdProj, finalNorm).normalize();
-          questRelAngleDeg = Math.atan2(toTargetFlat.dot(cRightProj), toTargetFlat.dot(cFwdProj)) * (180 / Math.PI); 
-        }
-        questDistMeters = Math.round(pGround.angleTo(buildings[questTargetIndex].pos) * planetRadius);
-      }
-      updateDirectionCompass(questRelAngleDeg, questDistMeters, cumulativeCameraYawDeg);
-
-      const el = clock.getElapsedTime(); const yrFrac = (el % YEAR_DURATION) / YEAR_DURATION;
-      const sIdx = Math.floor(yrFrac * 4); const nIdx = (sIdx + 1) % 4; const sBlend = (yrFrac * 4) % 1;
-      
-      const cDec = new THREE.Color([0xf472b6, 0x1e8234, 0xd9531e, 0xe0e7ff][sIdx]).lerp(new THREE.Color([0xf472b6, 0x1e8234, 0xd9531e, 0xe0e7ff][nIdx]), sBlend); decFoliageMat.color.lerp(cDec, 0.05);
-      const cPine = new THREE.Color([0x2e7d32, 0x1b5e20, 0x2e7d32, 0x90a4ae][sIdx]).lerp(new THREE.Color([0x2e7d32, 0x1b5e20, 0x2e7d32, 0x90a4ae][nIdx]), sBlend); pineFoliageMat.color.lerp(cPine, 0.05);
-      const cBush = new THREE.Color([0x7cb342, 0x33691e, 0xbf360c, 0xcfd8dc][sIdx]).lerp(new THREE.Color([0x7cb342, 0x33691e, 0xbf360c, 0xcfd8dc][nIdx]), sBlend); bushFoliageMat.color.lerp(cBush, 0.05);
-      const tGrd = new THREE.Color([0x5a9e32, 0x2d7a27, 0x8a622a, 0xdce5ed][sIdx]).lerp(new THREE.Color([0x5a9e32, 0x2d7a27, 0x8a622a, 0xdce5ed][nIdx]), sBlend); planet.material.color.lerp(tGrd, 0.05);
-
-      const dAng = (el % DAY_DURATION) / DAY_DURATION * Math.PI * 2;
-      dirLight.position.set(Math.cos(dAng) * 260, Math.sin(dAng) * 230, Math.sin(dAng * 0.5) * 80);
-      moonLight.position.copy(dirLight.position).negate();
-      const isN = Math.sin(dAng) < -0.1;
-      
-      let tSky = new THREE.Color(0x7ec0ee);
-      if (Math.sin(dAng) < 0.25 && !isN) { tSky.setHex(0xfb923c); dirLight.color.setHex(0xffedd5); dirLight.intensity = Math.max(0.1, Math.sin(dAng) * 2.5); hemiLight.intensity = 0.45; } 
-      else if (isN) { tSky.setHex(0x0f172a); dirLight.intensity = 0; hemiLight.intensity = 0.18; } 
-      else { tSky.setHex(sIdx === 3 ? 0x94a3b8 : 0x7ec0ee); dirLight.color.setHex(0xfff8e7); dirLight.intensity = 1.35; hemiLight.intensity = 0.55; }
-      scene.background.lerp(tSky, 0.08); scene.fog.color.lerp(tSky, 0.08);
-
-      const hrs = Math.floor((el % DAY_DURATION) / DAY_DURATION * 24); const mins = Math.floor(((el % DAY_DURATION) / DAY_DURATION * 24 - hrs) * 60);
-      document.getElementById('season-icon').innerText = ["🌸", "☀️", "🍂", "❄️"][sIdx];
-      document.getElementById('season-name').innerText = ["SPRING", "SUMMER", "AUTUMN", "WINTER"][sIdx];
-      document.getElementById('time-clock').innerText = `YEAR ${Math.floor(el / YEAR_DURATION) + 1} • DAY ${Math.floor((el % YEAR_DURATION) / DAY_DURATION) + 1} • ${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
-
-      renderer.render(scene, camera);
-    }
-    animate();
-  </script>
+    renderFrame();
+  });
+</script>
 </body>
 </html>
