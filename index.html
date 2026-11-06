@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>StoMo Creator Dynamic</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -16,6 +16,7 @@
         background-image: radial-gradient(circle at top right, #1e1b4b, #0f172a);
         color: #f8fafc;
         min-height: 100vh;
+        touch-action: manipulation; /* Prevents double-tap zoom delay */
     }
 
 
@@ -97,12 +98,28 @@
        
         <div class="flex flex-wrap justify-center items-center gap-2">
             <!-- Camera Selection -->
-            <div class="relative flex items-center bg-slate-800/80 backdrop-blur-md rounded-full border border-white/20 px-3 py-1 hover:border-purple-500 transition-colors shadow-lg">
+            <div class="relative flex items-center bg-slate-800/80 backdrop-blur-md rounded-full border border-white/20 px-4 py-1.5 hover:border-purple-500 transition-colors shadow-lg">
                 <i class="fas fa-camera text-purple-400 text-xs mr-2"></i>
-                <select id="cameraSelect" class="bg-transparent text-white text-xs sm:text-sm font-semibold outline-none cursor-pointer appearance-none pr-5">
-                    <option value="" class="text-black">Detecting cameras...</option>
+                <select id="cameraSelect" class="bg-transparent text-white text-xs sm:text-sm font-semibold outline-none cursor-pointer appearance-none pl-1 pr-7 min-w-[130px]">
+                    <option value="" class="text-black">&nbsp;&nbsp;Detecting cameras...</option>
                 </select>
-                <i class="fas fa-chevron-down text-white/50 text-[10px] absolute right-3 pointer-events-none"></i>
+                <i class="fas fa-chevron-down text-white/50 text-[10px] absolute right-4 pointer-events-none"></i>
+            </div>
+
+
+            <!-- Filter Selection -->
+            <div class="relative flex items-center bg-slate-800/80 backdrop-blur-md rounded-full border border-white/20 px-4 py-1.5 hover:border-purple-500 transition-colors shadow-lg">
+                <i class="fas fa-magic text-purple-400 text-xs mr-2"></i>
+                <select id="filterSelect" class="bg-transparent text-white text-xs sm:text-sm font-semibold outline-none cursor-pointer appearance-none pl-1 pr-7 min-w-[110px]">
+                    <option value="none" class="text-black">&nbsp;&nbsp;Normal</option>
+                    <option value="grayscale(100%)" class="text-black">&nbsp;&nbsp;B & W</option>
+                    <option value="sepia(100%)" class="text-black">&nbsp;&nbsp;Sepia</option>
+                    <option value="contrast(150%) saturate(120%)" class="text-black">&nbsp;&nbsp;Vivid</option>
+                    <option value="invert(100%)" class="text-black">&nbsp;&nbsp;Invert</option>
+                    <option value="hue-rotate(90deg)" class="text-black">&nbsp;&nbsp;Alien</option>
+                    <option value="sepia(40%) hue-rotate(170deg) saturate(200%) contrast(110%)" class="text-black">&nbsp;&nbsp;Underwater</option>
+                </select>
+                <i class="fas fa-chevron-down text-white/50 text-[10px] absolute right-4 pointer-events-none"></i>
             </div>
 
 
@@ -236,6 +253,7 @@
     const statusIndicator = document.getElementById('statusIndicator');
     const deviceSaveIcon = document.getElementById('deviceSaveIcon');
     const cameraSelect = document.getElementById('cameraSelect');
+    const filterSelect = document.getElementById('filterSelect');
 
 
     // Modal elements
@@ -353,26 +371,31 @@
            
             cameraSelect.innerHTML = '';
             if (videoDevices.length === 0) {
-                cameraSelect.innerHTML = '<option value="" class="text-black">No cameras found</option>';
+                cameraSelect.innerHTML = '<option value="" class="text-black">&nbsp;&nbsp;No cameras found</option>';
                 return;
             }
            
             videoDevices.forEach((device, index) => {
                 const option = document.createElement('option');
                 option.value = device.deviceId;
-                option.text = device.label || `Camera ${index + 1}`;
+                option.innerHTML = `&nbsp;&nbsp;${device.label || `Camera ${index + 1}`}`;
                 option.className = "text-black";
                 cameraSelect.appendChild(option);
             });
         } catch (err) {
             console.error("Error enumerating devices:", err);
-            cameraSelect.innerHTML = '<option value="" class="text-black">Camera access denied</option>';
+            cameraSelect.innerHTML = '<option value="" class="text-black">&nbsp;&nbsp;Camera access denied</option>';
         }
     }
 
 
     cameraSelect.addEventListener('change', (e) => {
         startCamera(e.target.value);
+    });
+
+
+    filterSelect.addEventListener('change', (e) => {
+        cameraFeed.style.filter = e.target.value;
     });
 
 
@@ -398,7 +421,10 @@
         const offscreenCanvas = document.createElement('canvas');
         offscreenCanvas.width = previewCanvas.width;
         offscreenCanvas.height = previewCanvas.height;
-        offscreenCanvas.getContext('2d').drawImage(cameraFeed, 0, 0);
+       
+        const offscreenCtx = offscreenCanvas.getContext('2d');
+        offscreenCtx.filter = filterSelect.value;
+        offscreenCtx.drawImage(cameraFeed, 0, 0);
        
         const dataUrl = offscreenCanvas.toDataURL('image/jpeg', 0.8);
         const newIndex = frames.length > 0 ? Math.max(...frames.map(f => f.index)) + 1 : 0;
